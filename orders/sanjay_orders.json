@@ -1,0 +1,10 @@
+{
+  "agent": "SANJAY",
+  "strategy": "Breakout",
+  "virtual_capital": 10000,
+  "peak_capital": 10000,
+  "daily_start_capital": 10000,
+  "open_positions": {},
+  "closed_positions": {},
+  "last_updated": "2026-04-04T23:54:09.030593"
+}

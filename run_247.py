@@ -136,9 +136,11 @@ def print_status(state):
 def run_arena_cycle(runner, state):
     try:
         import asyncio
-        asyncio.run(runner._run_cycle())
+        ran = asyncio.run(runner._run_all_timeframes())
         state['total_cycles'] = state.get('total_cycles', 0) + 1
         state['consecutive_crashes'] = 0
+        if not ran:
+            time.sleep(5)
         return True
     except Exception as e:
         tb = traceback.format_exc()

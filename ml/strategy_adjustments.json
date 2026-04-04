@@ -1,0 +1,37 @@
+{
+  "last_updated": "2026-04-05T00:04:01.704286",
+  "agent_adjustments": {
+    "MEENAKSHI": {
+      "win_rate": 0.342,
+      "avg_pnl": -1.191,
+      "total_trades": 38,
+      "recommendation": "DECREASE"
+    },
+    "VIJAY": {
+      "win_rate": 0.0,
+      "avg_pnl": -14.136,
+      "total_trades": 7,
+      "recommendation": "DECREASE"
+    },
+    "AJAY": {
+      "win_rate": 0.514,
+      "avg_pnl": 1.609,
+      "total_trades": 72,
+      "recommendation": "MAINTAIN"
+    },
+    "RANI": {
+      "win_rate": 0.0,
+      "avg_pnl": -3.41,
+      "total_trades": 4,
+      "recommendation": "DECREASE"
+    },
+    "RAMA": {
+      "win_rate": 0.65,
+      "avg_pnl": 4.868,
+      "total_trades": 40,
+      "recommendation": "INCREASE"
+    }
+  },
+  "model_accuracy": 0.48484848484848486,
+  "total_retrains": 1566
+}

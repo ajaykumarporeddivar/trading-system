@@ -1,7 +1,7 @@
 import ccxt
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from core.config import Config
 from core.logger import logger
 from engine.indicators import TechnicalIndicators
@@ -25,29 +25,44 @@ class DataAgent:
             ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            logger.info(f'Fetched {len(df)} candles for {symbol}')
+            logger.debug(f'Fetched {len(df)} {timeframe} candles for {symbol}')
             return df
         except Exception as e:
-            logger.error(f'Failed to fetch OHLCV for {symbol}: {e}')
+            logger.error(f'Failed to fetch OHLCV for {symbol} {timeframe}: {e}')
             return pd.DataFrame()
 
-    async def compute_indicators(self, symbol: str) -> Dict[str, Any]:
-        df = await self.fetch_ohlcv(symbol)
+    async def compute_indicators_for_tf(self, symbol: str, timeframe: str, limit: int = 100) -> Dict[str, Any]:
+        df = await self.fetch_ohlcv(symbol, timeframe, limit)
         if df.empty:
             return {}
-
         indicator_data = self.indicators.compute_all(df)
         indicator_data['symbol'] = symbol
+        indicator_data['timeframe'] = timeframe
         indicator_data['timestamp'] = pd.Timestamp.now().isoformat()
         return indicator_data
 
-    async def get_all_indicators(self, symbols: List[str] = Config.TRADING_SYMBOLS) -> Dict[str, Dict[str, Any]]:
+    async def compute_indicators(self, symbol: str, timeframe: str = None) -> Dict[str, Any]:
+        tf = timeframe or Config.TIMEFRAME
+        return await self.compute_indicators_for_tf(symbol, tf)
+
+    async def get_all_indicators(self, symbols: List[str] = Config.TRADING_SYMBOLS, timeframe: str = None) -> Dict[str, Dict[str, Any]]:
+        tf = timeframe or Config.TIMEFRAME
         results = {}
         for symbol in symbols:
-            data = await self.compute_indicators(symbol)
+            data = await self.compute_indicators_for_tf(symbol, tf)
             if data:
                 results[symbol] = data
-        logger.info(f'Indicators computed for {len(results)} symbols')
+        logger.debug(f'Indicators computed for {len(results)} symbols @ {tf}')
+        return results
+
+    async def get_multi_tf_indicators(self, symbols: List[str], timeframes: List[str]) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        results = {}
+        for symbol in symbols:
+            results[symbol] = {}
+            for tf in timeframes:
+                data = await self.compute_indicators_for_tf(symbol, tf)
+                if data:
+                    results[symbol][tf] = data
         return results
 
     async def get_market_overview(self) -> Dict[str, Any]:

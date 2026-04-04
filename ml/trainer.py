@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import pickle
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 
 import numpy as np
@@ -17,6 +17,8 @@ from core.logger import logger
 TRAINING_EXPORT = 'orders/training_data.jsonl'
 MODEL_DIR = 'ml/models/'
 METRICS_FILE = 'ml/models/metrics.json'
+WALK_FORWARD_WINDOW = 500
+FEATURE_PRUNE_BOTTOM = 0.20
 
 
 def load_training_data(filepath: str = TRAINING_EXPORT) -> List[Dict[str, Any]]:
@@ -76,11 +78,15 @@ def align_features(X: List[Dict[str, Any]]):
     return np.array(X_array), all_keys
 
 
-def train_model(model_type: str = 'random_forest'):
+def train_model(model_type: str = 'random_forest', use_walk_forward: bool = True, prune_features: bool = True):
     rows = load_training_data()
     if len(rows) < 50:
         logger.warning(f'Not enough training data: {len(rows)} rows (need 50+)')
         return None
+
+    if use_walk_forward and len(rows) > WALK_FORWARD_WINDOW:
+        rows = rows[-WALK_FORWARD_WINDOW:]
+        logger.info(f'Walk-forward: using last {len(rows)} rows of {len(load_training_data())} total')
 
     X_dicts, y, symbols, agents = flatten_features(rows)
     if len(X_dicts) < 50:
@@ -90,54 +96,92 @@ def train_model(model_type: str = 'random_forest'):
     X_array, feature_names = align_features(X_dicts)
     y_array = np.array(y)
 
+    if prune_features and len(feature_names) > 10:
+        X_array, feature_names, pruned_count = _prune_weak_features(X_array, feature_names, y_array)
+        if pruned_count > 0:
+            logger.info(f'Feature pruning: removed {pruned_count} weak features, {len(feature_names)} remaining')
+
     X_train, X_test, y_train, y_test = train_test_split(
         X_array, y_array, test_size=0.2, random_state=42, stratify=y_array
     )
 
-    if model_type == 'gradient_boosting':
-        model = GradientBoostingClassifier(
-            n_estimators=100,
-            max_depth=5,
-            learning_rate=0.1,
-            random_state=42
-        )
-    else:
-        model = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=10,
-            min_samples_split=5,
-            random_state=42
-        )
+    models_to_try = [
+        ('random_forest', RandomForestClassifier(
+            n_estimators=100, max_depth=10, min_samples_split=5, random_state=42
+        )),
+        ('gradient_boosting', GradientBoostingClassifier(
+            n_estimators=100, max_depth=5, learning_rate=0.1, random_state=42
+        )),
+    ]
 
-    model.fit(X_train, y_train)
+    best_model = None
+    best_metrics = None
+    best_score = -1
 
-    y_pred = model.predict(X_test)
-    metrics = {
-        'accuracy': accuracy_score(y_test, y_pred),
-        'precision': precision_score(y_test, y_pred, zero_division=0),
-        'recall': recall_score(y_test, y_pred, zero_division=0),
-        'f1': f1_score(y_test, y_pred, zero_division=0),
-        'train_size': len(X_train),
-        'test_size': len(X_test),
-        'total_samples': len(X_array),
-        'feature_names': feature_names,
-        'feature_importance': dict(zip(feature_names, model.feature_importances_.tolist())) if hasattr(model, 'feature_importances_') else {},
-        'trained_at': datetime.now().isoformat(),
-        'model_type': model_type
-    }
+    for name, model in models_to_try:
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        acc = accuracy_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred, zero_division=0.0)
+        score = acc * 0.4 + f1 * 0.6
+
+        metrics = {
+            'accuracy': acc,
+            'precision': precision_score(y_test, y_pred, zero_division=0.0),
+            'recall': recall_score(y_test, y_pred, zero_division=0.0),
+            'f1': f1,
+            'train_size': len(X_train),
+            'test_size': len(X_test),
+            'total_samples': len(X_array),
+            'feature_names': feature_names,
+            'feature_importance': dict(zip(feature_names, model.feature_importances_.tolist())) if hasattr(model, 'feature_importances_') else {},
+            'trained_at': datetime.now().isoformat(),
+            'model_type': name
+        }
+
+        if score > best_score:
+            best_score = score
+            best_model = model
+            best_metrics = metrics
+            logger.info(f'{name}: accuracy={acc:.3f}, f1={f1:.3f} (best so far)')
+
+    if best_model is None or best_metrics is None:
+        logger.error('No model could be trained')
+        return None
 
     os.makedirs(MODEL_DIR, exist_ok=True)
     model_path = os.path.join(MODEL_DIR, 'trading_model.pkl')
     with open(model_path, 'wb') as f:
-        pickle.dump(model, f)
+        pickle.dump(best_model, f)
 
     with open(METRICS_FILE, 'w') as f:
-        json.dump(metrics, f, indent=2)
+        json.dump(best_metrics, f, indent=2)
 
-    logger.info(f'Model trained: accuracy={metrics["accuracy"]:.3f}, precision={metrics["precision"]:.3f}, f1={metrics["f1"]:.3f}')
-    logger.info(f'Top features: {sorted(metrics["feature_importance"].items(), key=lambda x: x[1], reverse=True)[:5]}')
+    logger.info(f'Model trained: {best_metrics["model_type"]} accuracy={best_metrics["accuracy"]:.3f}, f1={best_metrics["f1"]:.3f}')
+    logger.info(f'Top features: {sorted(best_metrics["feature_importance"].items(), key=lambda x: x[1], reverse=True)[:5]}')
 
-    return metrics
+    return best_metrics
+
+
+def _prune_weak_features(X: np.ndarray, feature_names: List[str], y: np.ndarray) -> Tuple[np.ndarray, List[str], int]:
+    importances = []
+    for i, name in enumerate(feature_names):
+        col = X[:, i]
+        if np.std(col) == 0:
+            importances.append(0)
+            continue
+        corr = abs(np.corrcoef(col, y)[0, 1])
+        importances.append(corr if not np.isnan(corr) else 0)
+
+    n_prune = max(1, int(len(feature_names) * FEATURE_PRUNE_BOTTOM))
+    threshold = sorted(importances)[n_prune]
+
+    keep_mask = [imp > threshold for imp in importances]
+    X_pruned = X[:, keep_mask]
+    names_pruned = [n for n, k in zip(feature_names, keep_mask) if k]
+    pruned_count = sum(1 for k in keep_mask if not k)
+
+    return X_pruned, names_pruned, pruned_count
 
 
 def load_model():

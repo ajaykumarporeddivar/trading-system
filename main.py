@@ -1,59 +1,37 @@
-import asyncio
-import signal
 import sys
-from core.config import Config
-from core.logger import logger
-from core.orchestrator import Orchestrator
+import os
+import subprocess
 
-class TradingSystem:
-    def __init__(self):
-        self.orchestrator = None
-        self.running = False
+DEPRECATION_MSG = """
+================================================================
+WARNING: main.py is DEPRECATED and will be removed in a future release.
+This file uses the legacy Orchestrator (pre-V11).
 
-    async def start(self):
-        logger.info('Initializing Trading System...')
-        self.orchestrator = Orchestrator()
-        success = await self.orchestrator.start()
+The correct entry point for the V11 Institutional Trading System is:
 
-        if success:
-            self.running = True
-            logger.info('Trading system is running. Press Ctrl+C to stop.')
-            await self.keep_alive()
-        else:
-            logger.error('Failed to start trading system')
-            sys.exit(1)
+    python run_247.py
 
-    async def keep_alive(self):
-        loop = asyncio.get_event_loop()
-        stop_event = asyncio.Event()
+This includes:
+  - 7 timeframes (1m, 5m, 15m, 30m, 1h, 2h, 4h)
+  - ML prediction gate with adaptive scoring
+  - Risk Governor (6 portfolio-level checks)
+  - Tail-Risk Sentinel (7 trigger conditions)
+  - Regime Classifier (5-regime detection)
+  - Diagnostics Engine (PSI drift, attribution)
+  - A/B/AZ partition testing
+  - Canary deployment framework
+  - Web dashboard at http://127.0.0.1:5000
+================================================================
+"""
 
-        def signal_handler():
-            logger.info('Shutdown signal received')
-            stop_event.set()
-
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, signal_handler)
-
-        await stop_event.wait()
-        await self.shutdown()
-
-    async def shutdown(self):
-        logger.info('Shutting down trading system...')
-        self.running = False
-        if self.orchestrator:
-            await self.orchestrator.stop()
-        logger.info('System shutdown complete')
-        sys.exit(0)
-
-async def main():
-    system = TradingSystem()
-    await system.start()
+print(DEPRECATION_MSG)
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info('System interrupted by user')
-    except Exception as e:
-        logger.error(f'Fatal error: {e}', exc_info=True)
+    run_247 = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'run_247.py')
+    if os.path.exists(run_247):
+        print("Redirecting to run_247.py...")
+        subprocess.run([sys.executable, run_247] + sys.argv[1:])
+    else:
+        print("ERROR: run_247.py not found. Exiting.")
         sys.exit(1)
+
