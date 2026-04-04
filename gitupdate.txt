@@ -1,0 +1,67 @@
+D:\TRADING_SIGNAL\trading_system>git init
+Initialized empty Git repository in D:/TRADING_SIGNAL/trading_system/.git/
+
+D:\TRADING_SIGNAL\trading_system>git add .
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'DEPLOY.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'agents/briefing_agent.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'agents/data_agent.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'agents/execution_agent.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'agents/journal_agent.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'agents/risk_agent.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'agents/signal_agent.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'agentsprompt.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'alerts/email_alert.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'alerts/telegram.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/agents/ajay.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/agents/meenakshi.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/agents/rama.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/agents/rani.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/agents/sanjay.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/agents/vijay.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/arena_runner.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/base_agent.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/config.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/leaderboard.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'arena/training_export.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backtest.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'core/config.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'core/logger.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'core/orchestrator.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'deploy/railway.toml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'engine/indicators.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'engine/risk_calculator.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'engine/signal_engine.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'main.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'ml/retrain_scheduler.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'ml/strategy_updater.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'ml/trainer.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'monitor/auto_upgrade.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'monitor/health_check.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'monitor/status_dashboard.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'requirements.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'run_247.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'run_arena.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'start.bat', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'storage/database.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_arena.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_indicators.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_risk.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_signal.py', LF will be replaced by CRLF the next time Git touches it
+
+D:\TRADING_SIGNAL\trading_system>git commit -m "AI trading system with ML learning"
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: unable to auto-detect email address (got 'ajayk@DESKTOP-21S2KJR.(none)')
+
+D:\TRADING_SIGNAL\trading_system>

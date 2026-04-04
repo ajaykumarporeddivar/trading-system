@@ -1,0 +1,582 @@
+You are an expert quantitative crypto trading systems engineer.
+
+You are building a 6-agent paper trading ARENA on top of an existing trading bot codebase.
+The arena runs with  real money. Each named agent reads live crypto market data,
+applies its own unique strategy, places paper orders to its own JSON file,
+and competes to find who wins. The winner's trades feed an ML training dataset.
+
+---
+
+## EXISTING CODEBASE — DO NOT REWRITE THESE
+
+These files already exist. Reuse them. Do not duplicate their logic.
+
+agents/data_agent.py
+  - DataAgent class (async methods — use await)
+  - fetch_ohlcv(symbol, timeframe, limit) -> pd.DataFrame
+  - compute_indicators(symbol) -> Dict with all indicator values
+  - get_all_indicators(symbols) -> Dict[symbol, Dict]
+  - get_market_overview() -> Dict[symbol, {price, change_24h, volume_24h, high_24h, low_24h}]
+  - get_balance() -> Dict
+
+agents/signal_agent.py
+  - SignalAgent class
+  - analyze(indicator_data) -> List[Dict]  (LONG/SHORT/NO_TRADE verdicts)
+  - get_trade_candidates(signals) -> List[Dict]
+
+agents/execution_agent.py
+  - ExecutionAgent class
+  - execute_trade(trade_data) -> places REAL orders via ccxt
+  - DO NOT use this in the arena. Paper orders only.
+
+agents/risk_agent.py
+  - RiskAgent class
+  - evaluate_trade(trade_data, portfolio_state) -> {approved, blocks, position_size}
+  - check_all_positions(portfolio_state) -> {can_trade, exposure, daily_pnl}
+  - calculate_stop_loss(entry_price, side, atr, multiplier) -> float
+  - calculate_take_profit(entry_price, stop_loss, side, min_r) -> float
+
+agents/journal_agent.py
+  - JournalAgent class
+  - record_trade(trade_data)
+  - get_performance_report() -> {total_trades, wins, losses, win_rate, total_pnl}
+
+agents/briefing_agent.py
+  - BriefingAgent class
+  - send_trade_alert(trade_data) -> sends Telegram + email alert
+
+core/config.py  (existing, do not touch)
+core/logger.py  (existing, do not touch)
+engine/indicators.py  (existing, do not touch)
+  - TechnicalIndicators.compute_all(df) returns ALL indicators below
+engine/signal_engine.py  (existing, do not touch)
+engine/risk_calculator.py  (existing, do not touch)
+storage/database.py  (existing, do not touch)
+
+---
+
+## TRADING SETTINGS (from .env)
+
+TRADING_SYMBOLS   = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
+TIMEFRAME         = "4h"
+MAX_PORTFOLIO_EXPOSURE = 0.30
+DAILY_LOSS_CAP    = 0.03
+MAX_DRAWDOWN      = 0.10
+RISK_PER_TRADE    = 0.01
+MIN_CONFIDENCE    = 65
+INITIAL_BALANCE   = 10_000
+
+---
+
+## ARENA CONFIGURATION
+
+These values apply to ALL arena files:
+
+SYMBOLS           = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
+TIMEFRAME         = "4h"
+MIN_CONFIDENCE    = 65
+RISK_PER_TRADE    = 0.01          # 1% capital at risk per trade
+MAX_EXPOSURE      = 0.30          # 30% max open at once (position value capped, not skipped)
+DAILY_LOSS_CAP    = 0.03          # halt agent if down 3% today
+MAX_DRAWDOWN      = 0.10          # kill switch at 10% from peak
+INITIAL_BALANCE   = 10_000        # paper capital per agent (USDT)
+MAX_POSITIONS     = 5             # max open positions per agent
+POLL_INTERVAL     = 60            # seconds between market cycles
+ORDER_DIR         = "orders/"
+TRAINING_EXPORT   = "orders/training_data.jsonl"
+PERF_SUMMARY_CSV  = "orders/agent_performance_summary.csv"
+
+Per-trade math:
+  max_risk_per_trade  = INITIAL_BALANCE * RISK_PER_TRADE    = 
+  max_open_value      = INITIAL_BALANCE * MAX_EXPOSURE      = ,000
+  daily_halt_at       = INITIAL_BALANCE * DAILY_LOSS_CAP    =  loss
+  kill_switch_at      = INITIAL_BALANCE * (1 - MAX_DRAWDOWN) = ,000
+
+---
+
+## MARKET DATA SHAPE
+
+market_data passed to each agent's generate_signal():
+{
+  "symbol": str,                    # e.g. "BTC/USDT"
+  "price": float,                   # current close
+  "change_pct": float,              # % change last 4h candle vs previous
+  "indicators": {
+    "ema_21": float | None,         # EMA 21-period
+    "ema_50": float | None,         # EMA 50-period
+    "sma_20": float | None,         # SMA 20-period (Bollinger middle band)
+    "sma_50": float | None,         # SMA 50-period
+    "rsi_14": float | None,         # RSI 14-period (0-100)
+    "macd": float | None,           # MACD line
+    "macd_signal": float | None,    # MACD signal line
+    "macd_histogram": float | None, # MACD histogram
+    "bb_upper": float | None,       # Bollinger Band upper
+    "bb_middle": float | None,      # Bollinger Band middle (SMA 20)
+    "bb_lower": float | None,       # Bollinger Band lower
+    "bb_width": float | None,       # Bollinger Band width
+    "volume_ratio": float | None,   # current volume / 20-candle avg volume
+    "stoch_rsi_k": float | None,    # Stochastic RSI %K
+    "stoch_rsi_d": float | None,    # Stochastic RSI %D
+    "adx_14": float | None,         # ADX 14-period
+    "atr_14": float | None,         # ATR 14-period (also aliased as "atr")
+    "atr": float | None,            # Alias for atr_14
+    "fibonacci_levels": dict | None,# Fibonacci retracement levels
+    "high_20": float | None,        # 20-candle high
+    "low_20": float | None,         # 20-candle low
+    "current_price": float          # Current close price
+  }
+}
+
+Note: No fundamentals (pe_ratio, pb_ratio) — this is crypto.
+RAMA uses EMA crossover (ema_21/ema_50), not SMA.
+
+---
+
+## BASE CLASS CONTRACT
+
+File: arena/base_agent.py
+
+class BaseAgent(ABC):
+  __init__(name, strategy_name, order_db_path):
+    self.name = name
+    self.strategy_name = strategy_name
+    self.order_db_path = order_db_path
+    self.virtual_capital = INITIAL_BALANCE     # 10,000 USDT paper
+    self.peak_capital = INITIAL_BALANCE
+    self.daily_start_capital = INITIAL_BALANCE
+    self.open_positions: Dict[str, Dict] = {}
+    self.closed_positions: Dict[str, Dict] = {}
+    self._load_state()
+
+  Abstract method (each agent implements this):
+    generate_signal(market_data: Dict) -> Optional[Dict]
+
+  Provided methods (fully implement these in base):
+    submit_paper_order(signal, current_price) -> Dict
+      - Position sizing: (virtual_capital * RISK_PER_TRADE) / stop_distance
+        where stop_distance = current_price * signal["stop_loss_pct"]
+      - quantity = risk_amount / stop_distance
+      - position_value = quantity * current_price
+      - If position_value > virtual_capital * MAX_EXPOSURE:
+          CAP position (don't skip): quantity = max_position_value / current_price
+          Log: "Capped position size for SYMBOL to  (30% exposure)"
+      - Check: agent has no open position in same symbol already
+      - Check: len(open_positions) < MAX_POSITIONS
+      - Compute stop_loss and take_profit prices from signal pcts
+      - Save order to JSON with status "open"
+      - Print: [AGENT] PAPER BUY/SELL SYMBOL @ price | qty | conf% | reason
+
+    close_position(order_id, exit_price, reason) -> Dict
+      - Calc PnL: BUY -> (exit - entry) * qty, SELL -> (entry - exit) * qty
+      - pnl_pct = pnl / position_value * 100
+      - outcome = WIN / LOSS / BREAKEVEN
+      - Update virtual_capital += pnl
+      - Update peak_capital = max(peak_capital, virtual_capital)
+      - Save updated record
+      - Export closed trade to training_data.jsonl
+      - Print: [AGENT] WIN/LOSS SYMBOL @ exit | PnL:  (y%) | reason
+
+    check_exits(current_prices: Dict[str, float])
+      - For each open position:
+        BUY:  close if price <= stop_loss OR price >= take_profit
+        SELL: close if price >= stop_loss OR price <= take_profit
+      - Pass reason "stop_loss" or "take_profit"
+
+    check_risk_limits() -> bool
+      - daily_pnl = virtual_capital - daily_start_capital
+      - drawdown = (peak_capital - virtual_capital) / peak_capital
+      - Return False (halt) if daily_pnl <= -(INITIAL_BALANCE * DAILY_LOSS_CAP)
+      - Return False (halt) if drawdown >= MAX_DRAWDOWN
+      - Return True (ok to trade)
+
+    get_performance() -> Dict
+      Returns: {agent, strategy, total_trades, wins, losses, win_rate,
+                total_pnl, avg_pnl, best_trade, worst_trade,
+                virtual_capital, open_positions (count), peak_capital}
+
+    reset_daily_capital()
+      - Set daily_start_capital = virtual_capital
+
+    _load_state()    - load from JSON on init (includes closed_positions)
+    _save_state()    - persist to JSON (includes closed_positions)
+    _append_training_row(order) - append JSONL row to TRAINING_EXPORT
+
+  Order record format:
+  {
+    "order_id":      str (uuid4 first 8 chars),
+    "agent":         str,
+    "strategy":      str,
+    "symbol":        str,
+    "side":          "BUY" | "SELL",
+    "entry_price":   float,
+    "quantity":      float,
+    "position_value": float,
+    "stop_loss":     float,
+    "take_profit":   float,
+    "stop_loss_pct": float,
+    "take_profit_pct": float,
+    "confidence":    int,
+    "reason":        str,
+    "status":        "open" | "closed",
+    "opened_at":     ISO timestamp,
+    "closed_at":     ISO timestamp | null,
+    "exit_price":    float | null,
+    "pnl":           float | null,
+    "pnl_pct":       float | null,
+    "outcome":       "WIN" | "LOSS" | "BREAKEVEN" | null,
+    "close_reason":  str | null,
+    "features":      dict (copy of full indicators at entry — for ML)
+  }
+
+  JSON file structure (orders/AGENTNAME_orders.json):
+  {
+    "agent": str,
+    "strategy": str,
+    "virtual_capital": float,
+    "peak_capital": float,
+    "daily_start_capital": float,
+    "open_positions": { order_id: order_record },
+    "closed_positions": { order_id: order_record },
+    "last_updated": ISO timestamp
+  }
+
+---
+
+## THE 6 AGENTS — COMPLETE STRATEGY SPECIFICATIONS
+
+Signal format returned by generate_signal():
+{
+  "symbol": str,
+  "side": "BUY" | "SELL",
+  "confidence": int (0-100),
+  "reason": str  (pipe-separated list of conditions met),
+  "stop_loss_pct": float,
+  "take_profit_pct": float,
+  "features": dict  (copy of indicators)
+}
+
+Rules for ALL generate_signal() implementations:
+  - Guard every indicator: if any(v is None for v in [...]): return None
+  - Build confidence additively — each condition = explicit point value
+  - Only return signal if confidence >= MIN_CONFIDENCE (65)
+  - Cap confidence at 95
+  - reason = " | ".join(list of conditions that fired)
+  - Never invent data — if indicator is None, skip that condition silently
+
+
+### AJAY — Momentum
+File: arena/agents/ajay.py | Class: AjayAgent
+Strategy: Ride strong directional moves. Goes WITH the trend.
+
+BUY signals:
+  macd > macd_signal                          -> +30
+  50 < rsi < 72                               -> +25
+  vol_ratio > 1.5                             -> +20
+  change_pct > 0.5                            -> +15
+  Fire BUY if total >= 65
+
+SELL signals:
+  macd < macd_signal                          -> +30
+  28 < rsi < 50                               -> +25
+  vol_ratio > 1.5                             -> +20
+  change_pct < -0.5                           -> +15
+  Fire SELL if total >= 65
+
+Hard filters (return None):
+  rsi > 82  (exhaustion — momentum dying)
+  rsi < 18  (oversold — bounce risk)
+
+Stop: 2.5% | Target: 5%
+Crypto note: wider SL than stocks to survive 4h candle wicks
+
+
+### VIJAY — Mean Reversion
+File: arena/agents/vijay.py | Class: VijayAgent
+Strategy: Fade extremes. Crypto always mean-reverts on 4h.
+
+BUY signals:
+  price <= bb_lower * 1.003  (at or within 0.3% of lower band)  -> +35
+  rsi < 35                                                        -> +30
+  vol_ratio < 1.5  (no capitulation volume — wait for calm)       -> +20
+  change_pct < -1.5                                               -> +15
+  Fire BUY if total >= 65
+
+SELL signals:
+  price >= bb_upper * 0.997  (at or within 0.3% of upper band)  -> +35
+  rsi > 65                                                        -> +30
+  vol_ratio < 1.5                                                 -> +20
+  change_pct > 1.5                                                -> +15
+  Fire SELL if total >= 65
+
+Hard filters (return None):
+  vol_ratio > 3.0  (volume too extreme — possible breakout not reversion)
+
+Stop: 2% | Target: 4%
+Note: target is mean (bb_mid), not a fixed %; still store as 4% for sizing
+
+
+### SANJAY — Breakout
+File: arena/agents/sanjay.py | Class: SanjayAgent
+Strategy: Enter when price escapes its range with volume conviction.
+
+BUY signals:
+  price > high_20                             -> +40
+  vol_ratio > 2.0                             -> +30
+  atr > price * 0.018  (ATR expanding)        -> +20
+  change_pct > 1.0                            -> +10
+  Fire BUY if total >= 65
+
+SELL signals:
+  price < low_20                              -> +40
+  vol_ratio > 2.0                             -> +30
+  atr > price * 0.018                         -> +20
+  change_pct < -1.0                           -> +10
+  Fire SELL if total >= 65
+
+Dynamic SL/TP:
+  atr_pct = atr / price
+  stop_loss_pct   = max(0.015, min(0.06, atr_pct * 1.5))
+  take_profit_pct = max(0.03,  min(0.12, atr_pct * 3.0))
+
+
+### RAMA — Macro / Trend
+File: arena/agents/rama.py | Class: RamaAgent
+Strategy: Patient macro trend follower. Uses EMA crossover (not SMA).
+Trades with the macro trend only. No fundamentals — this is crypto.
+
+BUY signals:
+  price > ema_50  (price above long-term trend)                -> +30
+  ema_21 > ema_50  (short-term above long-term — golden zone)   -> +30
+  rsi > 50 and rsi < 70  (trend confirmed, not overbought)     -> +25
+  vol_ratio > 1.2  (trend has participation)                   -> +15
+  Fire BUY if total >= 65
+
+SELL signals:
+  price < ema_50                                               -> +30
+  ema_21 < ema_50  (death cross zone)                          -> +30
+  rsi < 50 and rsi > 30                                        -> +25
+  vol_ratio > 1.2                                              -> +15
+  Fire SELL if total >= 65
+
+Hard filters (return None):
+  rsi > 78  (already overbought, missed the move)
+  rsi < 22  (already oversold, bounce coming)
+
+Stop: 3% | Target: 9%
+Note: RAMA holds longer — 3:1 RR minimum, fewer but bigger trades
+
+
+### MEENAKSHI — Sentiment / Crowd Psychology
+File: arena/agents/meenakshi.py | Class: MeenakshiAgent
+Strategy: Read crowd fear and greed via price action patterns.
+Buys quiet optimism. Sells quiet fear. Avoids euphoria and panic.
+
+BUY signals:
+  0.3 < change_pct < 2.5   (positive but not euphoric)       -> +35
+  rsi < 60                                                    -> +25
+  0.7 < vol_ratio < 2.0    (normal to slightly elevated)      -> +20
+  macd > macd_signal                                          -> +20
+  Fire BUY if total >= 65
+
+SELL signals:
+  -2.5 < change_pct < -0.3  (negative but not panicking)     -> +35
+  rsi > 40                                                    -> +25
+  0.7 < vol_ratio < 2.0                                       -> +20
+  macd < macd_signal                                          -> +20
+  Fire SELL if total >= 65
+
+Hard filters (return None — extreme crowd behaviour):
+  change_pct > 4.0   (euphoria — late, dangerous)
+  change_pct < -5.0  (panic — possible reversal coming)
+  rsi > 80           (crowd already all in)
+  rsi < 20           (crowd capitulated — bounce risk)
+
+Stop: 2.5% | Target: 6%
+
+
+### RANI — Volatility Expansion
+File: arena/agents/rani.py | Class: RaniAgent
+Strategy: Trade volatility spikes. ATR expansion = big move starting.
+ATR collapse after rally = trap — fade it.
+
+BUY signals (vol expansion long):
+  atr > price * 0.020    (ATR > 2% of price — expanding)     -> +35
+  macd > macd_signal                                          -> +25
+  45 < rsi < 68                                               -> +20
+  vol_ratio > 1.5                                             -> +20
+  Fire BUY if total >= 65
+
+SELL signals (vol crush / trap fade):
+  atr < price * 0.008    (ATR < 0.8% — vol collapsed)        -> +35
+  change_pct > 2.0       (rally just happened)                -> +25
+  rsi > 60                                                    -> +20
+  macd < macd_signal                                          -> +15
+  Fire SELL if total >= 65
+
+Dynamic SL/TP:
+  atr_pct = atr / price
+  stop_loss_pct   = max(0.015, min(0.06,  atr_pct * 1.5))
+  take_profit_pct = max(0.03,  min(0.10,  atr_pct * 2.5))
+
+Hard filters (return None):
+  atr is None
+
+
+---
+
+## FILES TO GENERATE — COMPLETE LIST
+
+Generate every file completely. No placeholders. No TODOs. No stub logic.
+Use type hints throughout. Each file starts with its path as a comment.
+
+### arena/config.py
+All constants from the ARENA CONFIGURATION section above.
+Includes: SYMBOLS, TIMEFRAME, MIN_CONFIDENCE, RISK_PER_TRADE,
+MAX_EXPOSURE, DAILY_LOSS_CAP, MAX_DRAWDOWN, INITIAL_BALANCE,
+MAX_POSITIONS, POLL_INTERVAL, ORDER_DIR, TRAINING_EXPORT, PERF_SUMMARY_CSV
+Also add: AGENT_COLORS dict mapping each agent name to a terminal color code.
+
+### arena/base_agent.py
+Full implementation of BaseAgent as specified above.
+Imports: arena/config.py constants
+Implements ALL methods fully — load_state, save_state, submit_paper_order,
+close_position, check_exits, check_risk_limits, get_performance,
+reset_daily_capital, _append_training_row.
+Position sizing: CAP at MAX_EXPOSURE (don't skip).
+Training export goes inside close_position — append JSONL row immediately on close.
+
+### arena/agents/__init__.py
+Empty.
+
+### arena/agents/ajay.py
+AjayAgent(BaseAgent) — full generate_signal() as spec'd above.
+
+### arena/agents/vijay.py
+VijayAgent(BaseAgent) — full generate_signal() as spec'd above.
+
+### arena/agents/sanjay.py
+SanjayAgent(BaseAgent) — full generate_signal() as spec'd above.
+
+### arena/agents/rama.py
+RamaAgent(BaseAgent) — full generate_signal() as spec'd above.
+Uses ema_21/ema_50 (NOT sma20/sma50).
+
+### arena/agents/meenakshi.py
+MeenakshiAgent(BaseAgent) — full generate_signal() as spec'd above.
+
+### arena/agents/rani.py
+RaniAgent(BaseAgent) — full generate_signal() as spec'd above.
+
+### arena/arena_runner.py
+The main orchestrator loop. Uses async/await (DataAgent methods are async).
+Runs every POLL_INTERVAL seconds via asyncio.sleep().
+
+Each cycle:
+  1. Instantiate DataAgent. Fetch market data for all SYMBOLS via get_all_indicators().
+     Also call get_market_overview() to get current prices.
+  2. Build market_data dict for each symbol combining indicators + price + change_pct.
+  3. For each agent, for each symbol:
+       a. Call agent.check_risk_limits() — skip agent entirely if False (halted)
+       b. Call agent.check_exits(current_prices) — close any triggered positions
+       c. Call agent.generate_signal(market_data)
+       d. If signal returned and confidence >= MIN_CONFIDENCE:
+            call agent.submit_paper_order(signal, current_price)
+  4. After all agents processed: call leaderboard.print_leaderboard()
+  5. Call training_export.export_performance_csv()
+  6. Sleep POLL_INTERVAL seconds
+  7. Reset daily_start_capital at midnight (check date change each cycle)
+
+Handle exceptions per-agent — one agent crashing must not stop the loop.
+Log each cycle start/end with timestamp and cycle number.
+
+### arena/leaderboard.py
+Function: print_leaderboard(agents: List[BaseAgent], cycle_count)
+  - Collect get_performance() from all agents
+  - Sort by total_pnl descending
+  - Print formatted table to terminal with rank, agent, trades, win%, PnL, capital, status
+  - Color each agent row using AGENT_COLORS from config
+  - Highlight #1 rank row in bold
+  - Show open positions count per agent
+
+Function: get_leaderboard_data(agents) -> List[Dict]
+  - Returns sorted performance dicts (for export, not printing)
+
+### arena/training_export.py
+Function: append_training_row(order: Dict)
+  Called inside base_agent.close_position() on every closed trade.
+  Appends one JSONL line to TRAINING_EXPORT file:
+  {
+    "agent":      str,
+    "strategy":   str,
+    "symbol":     str,
+    "side":       str,
+    "confidence": int,
+    "features":   dict  (the "features" field from order = indicators at entry),
+    "outcome":    "WIN" | "LOSS" | "BREAKEVEN",
+    "pnl_pct":    float,
+    "label":      1 if WIN else 0,
+    "timestamp":  str
+  }
+
+Function: export_performance_csv(agents: List[BaseAgent])
+  Writes/overwrites PERF_SUMMARY_CSV with one row per agent.
+  Use extrasaction='ignore' since get_performance() returns extra fields.
+  columns: agent, strategy, total_trades, wins, losses, win_rate,
+           total_pnl, avg_pnl, best_trade, worst_trade, virtual_capital
+
+Function: load_training_data() -> List[Dict]
+  Reads all rows from TRAINING_EXPORT. Returns list of dicts.
+  Use this to feed into ML training later.
+
+Function: get_winner() -> Dict
+  Reads PERF_SUMMARY_CSV. Returns the agent row with highest win_rate
+  (minimum 10 closed trades required to qualify).
+  Returns None if no agent has 10+ trades yet.
+
+### run_arena.py
+Entry point. python run_arena.py starts everything.
+
+  - Print ASCII banner
+  - Instantiate all 6 agents with correct order_db_path values
+  - Instantiate ArenaRunner(agents)
+  - Call runner.run()  (blocking loop via asyncio.run())
+  - Handle KeyboardInterrupt cleanly:
+      print final leaderboard
+      export final CSV
+      print "Arena stopped. Training data saved to orders/training_data.jsonl"
+
+---
+
+## CODE QUALITY RULES
+
+- Type hints everywhere: from typing import Dict, Any, Optional, List
+- Every agent file: class docstring + generate_signal() docstring listing conditions
+- Every indicator used must be None-checked before use
+- Confidence scoring explicit and additive — no magic numbers hidden in if-blocks
+- All file I/O wrapped in try/except with meaningful error messages
+- Use logger from core.logger everywhere (not bare print except leaderboard display)
+- Leaderboard and banner may use print() directly (terminal UI)
+- No circular imports — arena/ imports from agents/ only, not vice versa
+- DataAgent methods are async — arena_runner must use await
+
+---
+
+## OUTPUT ORDER
+
+Generate files in this exact order:
+1.  arena/__init__.py              (empty)
+2.  arena/config.py
+3.  arena/base_agent.py
+4.  arena/agents/__init__.py       (empty)
+5.  arena/agents/ajay.py
+6.  arena/agents/vijay.py
+7.  arena/agents/sanjay.py
+8.  arena/agents/rama.py
+9.  arena/agents/meenakshi.py
+10. arena/agents/rani.py
+11. arena/arena_runner.py
+12. arena/leaderboard.py
+13. arena/training_export.py
+14. run_arena.py
+
+Each file: start with path as comment, end cleanly, no trailing prose between files.

@@ -1,0 +1,7 @@
+agent,strategy,total_trades,wins,losses,win_rate,total_pnl,avg_pnl,best_trade,worst_trade,virtual_capital
+AJAY,Momentum,72,37,35,51.4,3782.88,52.54,440.47,-470.48,13782.82
+VIJAY,Mean Reversion,7,0,7,0.0,-2878.42,-411.2,-69.41,-964.68,7121.57
+SANJAY,Breakout,0,0,0,0,0,0,0,0,10000
+RAMA,Macro Trend,40,26,14,65.0,6874.98,171.87,636.06,-526.12,16874.95
+MEENAKSHI,Sentiment,38,13,25,34.2,-1616.28,-42.53,286.06,-744.23,8383.69
+RANI,Volatility Expansion,4,0,4,0.0,-406.5,-101.62,-87.8,-113.9,9593.51

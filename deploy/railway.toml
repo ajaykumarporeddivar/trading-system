@@ -1,0 +1,27 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python run_247.py"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[variables]
+EXCHANGE = "binance"
+USE_TESTNET = "true"
+TRADING_SYMBOLS = "BTC/USDT,ETH/USDT,SOL/USDT,BNB/USDT,XRP/USDT"
+TIMEFRAME = "4h"
+MAX_PORTFOLIO_EXPOSURE = "0.30"
+DAILY_LOSS_CAP = "0.03"
+MAX_DRAWDOWN = "0.10"
+RISK_PER_TRADE = "0.01"
+MIN_CONFIDENCE = "65"
+INITIAL_BALANCE = "10000"
+CYCLE_HOURS = "4"
+BRIEFING_HOUR = "8"
+DATABASE_PATH = "trading_journal.db"
+LOG_LEVEL = "INFO"
+ML_RETRAIN_INTERVAL = "3600"
+ML_MIN_SAMPLES = "50"
