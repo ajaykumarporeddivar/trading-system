@@ -168,7 +168,7 @@ def main():
 
     retrain_scheduler = RetrainScheduler(
         check_interval=int(os.getenv('ML_RETRAIN_INTERVAL', '3600')),
-        min_samples=int(os.getenv('ML_MIN_SAMPLES', '50'))
+        min_samples=int(os.getenv('ML_MIN_SAMPLES', '500'))
     )
     retrain_scheduler.start()
 

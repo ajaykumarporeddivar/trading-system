@@ -19,6 +19,8 @@ MODEL_DIR = 'ml/models/'
 METRICS_FILE = 'ml/models/metrics.json'
 WALK_FORWARD_WINDOW = 500
 FEATURE_PRUNE_BOTTOM = 0.20
+V11_MIN_ROWS = 333
+V11_REQUIRED_FIELDS = ['regime_at_entry', 'timeframe', 'position_size_factors', 'ml_gate_score']
 
 
 def load_training_data(filepath: str = TRAINING_EXPORT) -> List[Dict[str, Any]]:
@@ -31,6 +33,24 @@ def load_training_data(filepath: str = TRAINING_EXPORT) -> List[Dict[str, Any]]:
             if line:
                 rows.append(json.loads(line))
     return rows
+
+
+def _is_v11_row(row: Dict[str, Any]) -> bool:
+    return all(row.get(field) is not None for field in V11_REQUIRED_FIELDS)
+
+
+def _purge_old_data(filepath: str = TRAINING_EXPORT):
+    if not os.path.exists(filepath):
+        return
+    rows = load_training_data(filepath)
+    v11_rows = [r for r in rows if _is_v11_row(r)]
+    old_rows = [r for r in rows if not _is_v11_row(r)]
+
+    if len(v11_rows) >= V11_MIN_ROWS and old_rows:
+        with open(filepath, 'w') as f:
+            for row in v11_rows:
+                f.write(json.dumps(row) + '\n')
+        logger.info(f'Data purge: removed {len(old_rows)} pre-V11 rows, kept {len(v11_rows)} V11 rows')
 
 
 def flatten_features(rows: List[Dict[str, Any]]):
@@ -78,15 +98,29 @@ def align_features(X: List[Dict[str, Any]]):
     return np.array(X_array), all_keys
 
 
-def train_model(model_type: str = 'random_forest', use_walk_forward: bool = True, prune_features: bool = True):
-    rows = load_training_data()
-    if len(rows) < 50:
-        logger.warning(f'Not enough training data: {len(rows)} rows (need 50+)')
+def train_model(model_type: str = 'random_forest', use_walk_forward: bool = True, prune_features: bool = True, v11_only: bool = True):
+    all_rows = load_training_data()
+    if len(all_rows) < 50:
+        logger.warning(f'Not enough training data: {len(all_rows)} rows (need 50+)')
         return None
+
+    v11_rows = [r for r in all_rows if _is_v11_row(r)]
+    old_rows = [r for r in all_rows if not _is_v11_row(r)]
+
+    if v11_only and len(v11_rows) >= V11_MIN_ROWS:
+        rows = v11_rows
+        logger.info(f'V11-only mode: using {len(rows)} enriched rows (purged {len(old_rows)} pre-V11 rows)')
+        _purge_old_data()
+    elif v11_only and len(v11_rows) > 0:
+        rows = all_rows
+        logger.info(f'Mixed mode: {len(v11_rows)} V11 + {len(old_rows)} pre-V11 rows ({len(all_rows)} total). Switches to V11-only at {V11_MIN_ROWS} rows.')
+    else:
+        rows = all_rows
+        logger.info(f'Pre-V11 mode: {len(rows)} rows with basic features only')
 
     if use_walk_forward and len(rows) > WALK_FORWARD_WINDOW:
         rows = rows[-WALK_FORWARD_WINDOW:]
-        logger.info(f'Walk-forward: using last {len(rows)} rows of {len(load_training_data())} total')
+        logger.info(f'Walk-forward: using last {len(rows)} rows of {len(all_rows)} total')
 
     X_dicts, y, symbols, agents = flatten_features(rows)
     if len(X_dicts) < 50:
@@ -164,19 +198,16 @@ def train_model(model_type: str = 'random_forest', use_walk_forward: bool = True
 
 
 def _prune_weak_features(X: np.ndarray, feature_names: List[str], y: np.ndarray) -> Tuple[np.ndarray, List[str], int]:
-    importances = []
-    for i, name in enumerate(feature_names):
-        col = X[:, i]
-        if np.std(col) == 0:
-            importances.append(0)
-            continue
-        corr = abs(np.corrcoef(col, y)[0, 1])
-        importances.append(corr if not np.isnan(corr) else 0)
+    from sklearn.inspection import permutation_importance
+    from sklearn.ensemble import RandomForestClassifier
 
-    n_prune = max(1, int(len(feature_names) * FEATURE_PRUNE_BOTTOM))
-    threshold = sorted(importances)[n_prune]
+    model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42)
+    model.fit(X, y)
+    result = permutation_importance(model, X, y, n_repeats=10, random_state=42, scoring='accuracy')
+    importances = result.importances_mean.tolist()
+    max_imp = max(importances) if importances else 1
 
-    keep_mask = [imp > threshold for imp in importances]
+    keep_mask = [imp >= 0.01 * max_imp for imp in importances]
     X_pruned = X[:, keep_mask]
     names_pruned = [n for n, k in zip(feature_names, keep_mask) if k]
     pruned_count = sum(1 for k in keep_mask if not k)

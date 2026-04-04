@@ -21,7 +21,7 @@ ML_STRONG_REJECT = 0.35
 RISK_PER_TRADE = 0.01
 MAX_EXPOSURE = 0.30
 DAILY_LOSS_CAP = 0.03
-MAX_DRAWDOWN = 0.10
+MAX_DRAWDOWN = 0.08
 INITIAL_BALANCE = 10_000
 MAX_POSITIONS = 5
 POLL_INTERVAL = 60
@@ -31,6 +31,31 @@ PERF_SUMMARY_CSV = 'orders/agent_performance_summary.csv'
 ML_PREDICTIONS_LOG = 'logs/ml_predictions.jsonl'
 WALK_FORWARD_WINDOW = 500
 FEATURE_PRUNE_BOTTOM = 0.20
+
+TF_SL_MULT: Dict[str, float] = {
+    '1m': 0.20, '5m': 0.30, '15m': 0.40,
+    '30m': 0.55, '1h': 0.70, '2h': 0.85, '4h': 1.00
+}
+
+TF_MAX_HOLD: Dict[str, int] = {
+    '1m': 600,     # 10 minutes
+    '5m': 1800,    # 30 minutes
+    '15m': 3600,   # 1 hour
+    '30m': 7200,   # 2 hours
+    '1h': 14400,   # 4 hours
+    '2h': 28800,   # 8 hours
+    '4h': 57600    # 16 hours
+}
+
+TF_MAX_POSITIONS: Dict[str, int] = {
+    '1m': 10,
+    '5m': 8,
+    '15m': 6,
+    '30m': 5,
+    '1h': 4,
+    '2h': 3,
+    '4h': 2
+}
 
 AGENT_COLORS: Dict[str, str] = {
     'AJAY': '\033[91m',

@@ -3,161 +3,185 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Trading Arena - Dashboard</title>
+    <title>Crypto Trading Arena V11 — Command Center</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-    <header>
-        <div class="header-left">
-            <h1>Crypto Trading Arena</h1>
-            <span class="status-indicator" id="statusIndicator">CONNECTING</span>
-        </div>
-        <div class="header-right">
-            <span id="lastUpdate">Last update: --</span>
-            <button id="refreshBtn" onclick="loadDashboard()">Refresh</button>
-        </div>
-    </header>
-
-    <div class="summary-cards">
-        <div class="card summary-card">
-            <div class="card-label">Total P&L</div>
-            <div class="card-value" id="totalPnl">--</div>
-        </div>
-        <div class="card summary-card">
-            <div class="card-label">Total Trades</div>
-            <div class="card-value" id="totalTrades">--</div>
-        </div>
-        <div class="card summary-card">
-            <div class="card-label">Win Rate</div>
-            <div class="card-value" id="winRate">--</div>
-        </div>
-        <div class="card summary-card">
-            <div class="card-label">Active Agents</div>
-            <div class="card-value" id="activeAgents">--</div>
-        </div>
-        <div class="card summary-card">
-            <div class="card-label">System Health</div>
-            <div class="card-value" id="healthStatus">--</div>
-        </div>
-        <div class="card summary-card">
-            <div class="card-label">Training Data</div>
-            <div class="card-value" id="trainingRows">--</div>
+    <div id="loginOverlay" class="login-overlay" style="display:none">
+        <div class="login-box">
+            <h1>Crypto Trading Arena V11</h1>
+            <p>Institutional Command Center</p>
+            <form id="loginForm">
+                <input type="password" id="passwordInput" placeholder="Enter password" autocomplete="off" required>
+                <button type="submit">Authenticate</button>
+                <div id="loginError" class="error"></div>
+            </form>
         </div>
     </div>
 
-    <div class="main-grid">
-        <div class="panel">
-            <h2>Agent Leaderboard</h2>
-            <table id="agentTable">
-                <thead>
-                    <tr>
-                        <th>Rank</th>
-                        <th>Agent</th>
-                        <th>Strategy</th>
-                        <th>Capital</th>
-                        <th>P&L</th>
-                        <th>Win%</th>
-                        <th>Open</th>
-                        <th>Trades</th>
-                    </tr>
-                </thead>
-                <tbody id="agentTableBody">
-                    <tr><td colspan="8" class="empty">Loading...</td></tr>
-                </tbody>
-            </table>
-        </div>
+    <div id="app">
+        <header>
+            <div class="header-left">
+                <h1>Crypto Trading Arena V11</h1>
+                <span class="status-indicator" id="statusIndicator">CONNECTING</span>
+                <span class="status-indicator" id="sseStatus">SSE: OFF</span>
+            </div>
+            <div class="header-right">
+                <span id="lastUpdate">--</span>
+                <button id="refreshBtn" onclick="loadDashboard()">Refresh</button>
+                <div class="c2-dropdown">
+                    <button id="c2Btn" class="c2-btn">⚡ C2 Controls</button>
+                    <div class="c2-menu" id="c2Menu">
+                        <button onclick="c2HaltAll()" class="c2-danger">⛔ Halt All Entries</button>
+                        <button onclick="c2ResumeAll()" class="c2-warn">▶ Resume Trading</button>
+                        <button onclick="c2CloseAll()" class="c2-danger">✕ Close All Positions</button>
+                        <button onclick="c2Retrain()" class="c2-action">⟳ Force ML Retrain</button>
+                    </div>
+                </div>
+            </div>
+        </header>
 
-        <div class="panel">
-            <h2>Win Rate Distribution</h2>
-            <canvas id="winRateChart"></canvas>
-        </div>
-
-        <div class="panel">
-            <h2>Recent Signals</h2>
-            <table id="signalsTable">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Agent</th>
-                        <th>Symbol</th>
-                        <th>Side</th>
-                        <th>ML Prob</th>
-                        <th>ML Gate</th>
-                        <th>Regime</th>
-                    </tr>
-                </thead>
-                <tbody id="signalsTableBody">
-                    <tr><td colspan="4" class="empty">No signals yet</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="panel">
-            <h2>Recent Trades</h2>
-            <table id="tradesTable">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Agent</th>
-                        <th>Symbol</th>
-                        <th>Entry</th>
-                        <th>Exit</th>
-                        <th>P&L</th>
-                        <th>Regime</th>
-                        <th>Reason</th>
-                        <th>ML Prob</th>
-                    </tr>
-                </thead>
-                <tbody id="tradesTableBody">
-                    <tr><td colspan="6" class="empty">No trades yet</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="panel">
-            <h2>ML Model Status</h2>
-            <div id="modelStatus" class="model-status">
-                <span class="empty">Loading...</span>
+        <div class="summary-cards">
+            <div class="card summary-card">
+                <div class="card-label">Total P&L</div>
+                <div class="card-value" id="totalPnl">--</div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-label">Total Trades</div>
+                <div class="card-value" id="totalTrades">--</div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-label">Win Rate</div>
+                <div class="card-value" id="winRate">--</div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-label">Active Agents</div>
+                <div class="card-value" id="activeAgents">--</div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-label">System Health</div>
+                <div class="card-value" id="healthStatus">--</div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-label">ML Predictions</div>
+                <div class="card-value" id="mlPredictions">--</div>
             </div>
         </div>
 
-        <div class="panel">
-            <h2>Training Data Win Rate</h2>
-            <canvas id="trainingChart"></canvas>
-        </div>
-
-        <div class="panel">
-            <h2>V11 Institutional Status</h2>
-            <div id="v11Status" class="v11-status">
-                <span class="empty">Loading...</span>
+        <div class="main-grid">
+            <div class="panel full-width">
+                <h2>MTF Matrix — Assets × Timeframes</h2>
+                <div id="mtfMatrix" class="mtf-matrix">
+                    <div class="empty">Loading...</div>
+                </div>
             </div>
-        </div>
 
-        <div class="panel">
-            <h2>A/B/AZ Partitions</h2>
-            <table id="abTable">
-                <thead>
-                    <tr><th>Partition</th><th>Model</th><th>Allocation</th><th>Trades</th><th>Return</th></tr>
-                </thead>
-                <tbody id="abTableBody">
-                    <tr><td colspan="5" class="empty">Loading...</td></tr>
-                </tbody>
-            </table>
-        </div>
+            <div class="panel">
+                <h2>Agent Leaderboard</h2>
+                <table id="agentTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Agent</th>
+                            <th>Strategy</th>
+                            <th>Capital</th>
+                            <th>P&L</th>
+                            <th>Win%</th>
+                            <th>Open</th>
+                            <th>Trades</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agentTableBody">
+                        <tr><td colspan="8" class="empty">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
 
-        <div class="panel">
-            <h2>Multi-Timeframe Performance</h2>
-            <table id="tfTable">
-                <thead>
-                    <tr><th>Timeframe</th><th>Trades</th><th>Win%</th><th>Avg PnL%</th><th>Total PnL%</th></tr>
-                </thead>
-                <tbody id="tfTableBody">
-                    <tr><td colspan="5" class="empty">Loading...</td></tr>
-                </tbody>
-            </table>
+            <div class="panel">
+                <h2>Recent Signals</h2>
+                <table id="signalsTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>TF</th>
+                            <th>Agent</th>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>ML Prob</th>
+                            <th>Gate</th>
+                            <th>Regime</th>
+                        </tr>
+                    </thead>
+                    <tbody id="signalsTableBody">
+                        <tr><td colspan="8" class="empty">No signals yet</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="panel">
+                <h2>Recent Trades</h2>
+                <table id="tradesTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>TF</th>
+                            <th>Agent</th>
+                            <th>Symbol</th>
+                            <th>Entry</th>
+                            <th>Exit</th>
+                            <th>P&L</th>
+                            <th>Regime</th>
+                            <th>Reason</th>
+                            <th>ML</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tradesTableBody">
+                        <tr><td colspan="10" class="empty">No trades yet</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="panel">
+                <h2>ML Model Status</h2>
+                <div id="modelStatus" class="model-status">
+                    <span class="empty">Loading...</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Timeframe Performance</h2>
+                <table id="tfTable">
+                    <thead>
+                        <tr><th>TF</th><th>Trades</th><th>Win%</th><th>Avg PnL%</th><th>Total PnL%</th></tr>
+                    </thead>
+                    <tbody id="tfTableBody">
+                        <tr><td colspan="5" class="empty">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="panel">
+                <h2>V11 Institutional Status</h2>
+                <div id="v11Status" class="v11-status">
+                    <span class="empty">Loading...</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>C2 Action Log</h2>
+                <table id="c2LogTable">
+                    <thead>
+                        <tr><th>Time</th><th>Action</th><th>Details</th></tr>
+                    </thead>
+                    <tbody id="c2LogTableBody">
+                        <tr><td colspan="3" class="empty">No actions yet</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
+
+    <div id="alertContainer" class="alert-container"></div>
 
     <script src="/static/js/dashboard.js"></script>
 </body>

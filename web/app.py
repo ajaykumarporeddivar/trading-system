@@ -1,22 +1,37 @@
 import sys
 import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 import json
 import time
 import threading
+import queue
+import hashlib
+from datetime import datetime, timedelta
+from functools import wraps
+
+import jwt
 import numpy as np
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request, Response, stream_with_context
+from flask_cors import CORS
 from monitor.health_check import check_system_health
 
 app = Flask(__name__,
             template_folder=os.path.join(os.path.dirname(__file__), 'templates'),
             static_folder=os.path.join(os.path.dirname(__file__), 'static'))
+CORS(app)
+
+app.config['SECRET_KEY'] = os.getenv('DASHBOARD_SECRET', 'trading-system-v11-secret-key-2026')
+JWT_EXPIRY = 24
 
 _cache = {}
 _cache_lock = threading.Lock()
 CACHE_TTL = 15
+
+_sse_clients = []
+_sse_lock = threading.Lock()
+
+C2_LOG = 'logs/c2_actions.jsonl'
 
 
 def _cached(key, fn, ttl=None):
@@ -30,6 +45,84 @@ def _cached(key, fn, ttl=None):
         _cache[key] = {'data': data, 'ts': time.time()}
     return data
 
+
+def _hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def _get_admin_hash():
+    return _hash_password(os.getenv('DASHBOARD_PASSWORD', 'admin'))
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            token = request.cookies.get('token', '')
+        if not token:
+            return jsonify({'error': 'Authentication required'}), 401
+        try:
+            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            request.user = payload
+            return f(*args, **kwargs)
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
+    return decorated
+
+
+def require_admin(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            token = request.cookies.get('token', '')
+        if not token:
+            return jsonify({'error': 'Authentication required'}), 401
+        try:
+            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            if payload.get('role') != 'admin':
+                return jsonify({'error': 'Admin access required'}), 403
+            request.user = payload
+            return f(*args, **kwargs)
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
+    return decorated
+
+
+def _log_c2_action(action, details, user='system'):
+    try:
+        os.makedirs('logs', exist_ok=True)
+        entry = {
+            'action': action,
+            'details': details,
+            'user': user,
+            'timestamp': datetime.now().isoformat()
+        }
+        with open(C2_LOG, 'a') as f:
+            f.write(json.dumps(entry) + '\n')
+    except Exception:
+        pass
+
+
+def _broadcast_sse(event, data):
+    msg = f'event: {event}\ndata: {json.dumps(data)}\n\n'
+    with _sse_lock:
+        dead = []
+        for q in _sse_clients:
+            try:
+                q.put_nowait(msg)
+            except Exception:
+                dead.append(q)
+        for q in dead:
+            _sse_clients.remove(q)
+
+
+# ==================== DATA FUNCTIONS ====================
 
 def get_agent_status():
     agents = {}
@@ -141,6 +234,7 @@ def get_recent_signals():
                             'agent': agent_name,
                             'reason': pos.get('reason', ''),
                             'status': pos.get('status', 'unknown'),
+                            'timeframe': pos.get('timeframe', 'unknown'),
                             'regime': pos.get('regime_at_entry', 'unknown'),
                             'ml_prob_win': round(ml_prob, 2),
                             'ml_approved': ml_prob >= 0.30 and pos.get('ml_prediction', -1) != 0
@@ -177,6 +271,7 @@ def get_recent_trades():
                             'status': pos.get('status', 'closed'),
                             'agent': agent_name,
                             'close_reason': pos.get('close_reason', ''),
+                            'timeframe': pos.get('timeframe', 'unknown'),
                             'regime_entry': pos.get('regime_at_entry', 'unknown'),
                             'regime_exit': pos.get('regime_at_exit', 'unknown'),
                             'ml_prob_win': round(pos.get('ml_prob_win', 0.5), 2),
@@ -187,6 +282,48 @@ def get_recent_trades():
                 continue
     trades.sort(key=lambda x: x['timestamp'], reverse=True)
     return trades[:50]
+
+
+def get_mtf_matrix():
+    orders_dir = os.path.join(os.path.dirname(__file__), '..', 'orders')
+    symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
+    timeframes = ['1m', '5m', '15m', '30m', '1h', '2h', '4h']
+    matrix = {}
+    if not os.path.exists(orders_dir):
+        return {'symbols': symbols, 'timeframes': timeframes, 'cells': {}}
+    for sym in symbols:
+        matrix[sym] = {}
+        for tf in timeframes:
+            matrix[sym][tf] = {
+                'regime': 'unknown',
+                'signals': 0,
+                'open_positions': 0,
+                'avg_ml_prob': 0,
+                'last_signal': None
+            }
+    for f in os.listdir(orders_dir):
+        if f.endswith('_orders.json'):
+            try:
+                with open(os.path.join(orders_dir, f), 'r') as fh:
+                    data = json.load(fh)
+                for pos_id, pos in {**data.get('open_positions', {}), **data.get('closed_positions', {})}.items():
+                    sym = pos.get('symbol', '')
+                    tf = pos.get('timeframe', '4h')
+                    if sym in matrix and tf in matrix.get(sym, {}):
+                        matrix[sym][tf]['signals'] += 1
+                        if pos.get('status') == 'open':
+                            matrix[sym][tf]['open_positions'] += 1
+                        ml_prob = pos.get('ml_prob_win', 0.5)
+                        current_avg = matrix[sym][tf]['avg_ml_prob']
+                        n = matrix[sym][tf]['signals']
+                        matrix[sym][tf]['avg_ml_prob'] = round((current_avg * (n - 1) + ml_prob) / n, 2) if n > 0 else ml_prob
+                        ts = pos.get('opened_at', '')
+                        if not matrix[sym][tf]['last_signal'] or ts > matrix[sym][tf]['last_signal']:
+                            matrix[sym][tf]['last_signal'] = ts
+                            matrix[sym][tf]['regime'] = pos.get('regime_at_entry', 'unknown')
+            except Exception:
+                continue
+    return {'symbols': symbols, 'timeframes': timeframes, 'cells': matrix}
 
 
 def get_v11_system_status():
@@ -264,6 +401,14 @@ def get_v11_system_status():
                         if d.get('drift_detected'):
                             drift_alerts += 1
 
+        c2_log = os.path.join(os.path.dirname(__file__), '..', C2_LOG)
+        c2_actions = []
+        if os.path.exists(c2_log):
+            with open(c2_log, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        c2_actions.append(json.loads(line))
+
         return {
             'sentinel': {
                 'halted': False,
@@ -276,10 +421,34 @@ def get_v11_system_status():
             'stability_contract': stability_checks[-3:],
             'ml_predictions': ml_stats,
             'timeframe_stats': tf_stats,
-            'drift_alerts': drift_alerts
+            'drift_alerts': drift_alerts,
+            'c2_actions': c2_actions[-10:]
         }
     except Exception as e:
         return {'error': str(e)}
+
+
+# ==================== ROUTES ====================
+
+@app.route('/login')
+def login_page():
+    return render_template('login.html')
+
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.get_json()
+    password = data.get('password', '')
+    if _hash_password(password) == _get_admin_hash():
+        token = jwt.encode({
+            'role': 'admin',
+            'exp': datetime.utcnow() + timedelta(hours=JWT_EXPIRY)
+        }, app.config['SECRET_KEY'], algorithm='HS256')
+        resp = jsonify({'token': token, 'role': 'admin'})
+        resp.set_cookie('token', token, httponly=True, max_age=JWT_EXPIRY * 3600)
+        _log_c2_action('login', {'user': 'admin'})
+        return resp
+    return jsonify({'error': 'Invalid password'}), 401
 
 
 @app.route('/')
@@ -288,6 +457,7 @@ def index():
 
 
 @app.route('/api/dashboard')
+@require_auth
 def api_dashboard():
     agents = _cached('agents', get_agent_status, ttl=5)
     training = _cached('training', get_training_stats, ttl=10)
@@ -317,33 +487,142 @@ def api_dashboard():
 
 
 @app.route('/api/agents')
+@require_auth
 def api_agents():
     return jsonify(_cached('agents', get_agent_status, ttl=5))
 
 
 @app.route('/api/health')
+@require_auth
 def api_health():
     return jsonify(_cached('health', check_system_health, ttl=10))
 
 
 @app.route('/api/signals')
+@require_auth
 def api_signals():
     return jsonify(get_recent_signals())
 
 
 @app.route('/api/trades')
+@require_auth
 def api_trades():
     return jsonify(get_recent_trades())
 
 
 @app.route('/api/model')
+@require_auth
 def api_model():
     return jsonify(_cached('model', get_model_status, ttl=30))
 
 
 @app.route('/api/v11')
+@require_auth
 def api_v11():
     return jsonify(_cached('v11', get_v11_system_status, ttl=10))
+
+
+@app.route('/api/mtf-matrix')
+@require_auth
+def api_mtf_matrix():
+    return jsonify(_cached('mtf', get_mtf_matrix, ttl=5))
+
+
+@app.route('/api/stream')
+@require_auth
+def api_stream():
+    def event_stream():
+        q = queue.Queue(maxsize=50)
+        with _sse_lock:
+            _sse_clients.append(q)
+        try:
+            while True:
+                try:
+                    msg = q.get(timeout=30)
+                    yield msg
+                except queue.Empty:
+                    yield f': heartbeat\n\n'
+        except GeneratorExit:
+            with _sse_lock:
+                if q in _sse_clients:
+                    _sse_clients.remove(q)
+    return Response(stream_with_context(event_stream()),
+                    mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+# ==================== C2 CONTROLS ====================
+
+@app.route('/api/c2/halt-all', methods=['POST'])
+@require_admin
+def c2_halt_all():
+    try:
+        from core.tail_risk_sentinel import TailRiskSentinel
+        sentinel = TailRiskSentinel()
+        sentinel.force_halt('Manual halt from dashboard')
+        _log_c2_action('halt_all', {'triggered_by': request.user.get('role', 'admin')})
+        _broadcast_sse('alert', {'type': 'HALT', 'message': 'All new entries halted by admin'})
+        return jsonify({'status': 'halted', 'message': 'All new entries halted'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/c2/resume-all', methods=['POST'])
+@require_admin
+def c2_resume_all():
+    try:
+        _log_c2_action('resume_all', {'triggered_by': request.user.get('role', 'admin')})
+        _broadcast_sse('alert', {'type': 'RESUME', 'message': 'Trading resumed by admin'})
+        return jsonify({'status': 'resumed', 'message': 'Trading resumed'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/c2/close-all-positions', methods=['POST'])
+@require_admin
+def c2_close_all():
+    try:
+        orders_dir = os.path.join(os.path.dirname(__file__), '..', 'orders')
+        closed_count = 0
+        for f in os.listdir(orders_dir):
+            if f.endswith('_orders.json'):
+                filepath = os.path.join(orders_dir, f)
+                with open(filepath, 'r') as fh:
+                    data = json.load(fh)
+                for oid, pos in list(data.get('open_positions', {}).items()):
+                    entry = pos.get('entry_price', 0)
+                    side = pos.get('side', 'BUY')
+                    pos['status'] = 'closed'
+                    pos['closed_at'] = datetime.now().isoformat()
+                    pos['exit_price'] = entry
+                    pos['pnl'] = 0
+                    pos['pnl_pct'] = 0
+                    pos['outcome'] = 'BREAKEVEN'
+                    pos['close_reason'] = 'manual_close_all'
+                    pos['regime_at_exit'] = pos.get('regime_at_entry', 'unknown')
+                    data['closed_positions'][oid] = pos
+                    closed_count += 1
+                data['open_positions'] = {}
+                with open(filepath, 'w') as fh:
+                    json.dump(data, fh, indent=2)
+        _log_c2_action('close_all_positions', {'count': closed_count, 'triggered_by': request.user.get('role', 'admin')})
+        _broadcast_sse('alert', {'type': 'CLOSE_ALL', 'message': f'{closed_count} positions closed manually'})
+        return jsonify({'status': 'closed', 'count': closed_count})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/c2/retrain', methods=['POST'])
+@require_admin
+def c2_retrain():
+    try:
+        from ml.trainer import train_model
+        metrics = train_model()
+        _log_c2_action('manual_retrain', {'metrics': metrics, 'triggered_by': request.user.get('role', 'admin')})
+        _broadcast_sse('alert', {'type': 'RETRAIN', 'message': f'Model retrained: acc={metrics.get("accuracy", 0):.3f}' if metrics else 'Retrain failed'})
+        return jsonify({'status': 'retrained', 'metrics': metrics})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 def run(port=5000, debug=False):

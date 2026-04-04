@@ -31,14 +31,16 @@ class StrategyUpdater:
             json.dump(self.adjustments, f, indent=2)
 
     def retrain_and_update(self, min_samples: int = 50):
-        from ml.trainer import load_training_data
+        from ml.trainer import load_training_data, train_model, _is_v11_row, V11_MIN_ROWS
         rows = load_training_data()
+        v11_rows = [r for r in rows if _is_v11_row(r)]
 
         if len(rows) < min_samples:
             logger.info(f'Not enough data for retraining: {len(rows)} < {min_samples}')
             return False
 
-        metrics = train_model()
+        use_v11_only = len(v11_rows) >= V11_MIN_ROWS
+        metrics = train_model(v11_only=use_v11_only)
         if metrics is None:
             return False
 

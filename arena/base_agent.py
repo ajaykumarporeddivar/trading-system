@@ -9,7 +9,8 @@ from typing import Dict, Any, Optional, List
 from arena.config import (
     INITIAL_BALANCE, RISK_PER_TRADE, MAX_EXPOSURE, MAX_POSITIONS,
     DAILY_LOSS_CAP, MAX_DRAWDOWN, ORDER_DIR, TRAINING_EXPORT,
-    ML_MIN_PROB_WIN, ML_REJECT_THRESHOLD, ML_PREDICTIONS_LOG
+    ML_MIN_PROB_WIN, ML_REJECT_THRESHOLD, ML_PREDICTIONS_LOG,
+    TF_SL_MULT, TF_MAX_HOLD, TF_MAX_POSITIONS
 )
 from core.logger import logger
 
@@ -62,12 +63,18 @@ class BaseAgent(ABC):
             position_value = max_position_value
             logger.info(f'{self.name}: Capped position size for {signal["symbol"]} to  ({MAX_EXPOSURE:.0%} exposure)')
 
-        if signal['symbol'] in [p['symbol'] for p in self.open_positions.values()]:
-            logger.info(f'{self.name}: Already have open position in {signal["symbol"]}')
+        if any(p['symbol'] == signal['symbol'] and p.get('timeframe') == timeframe for p in self.open_positions.values()):
+            logger.info(f'{self.name}: Already have open position in {signal["symbol"]} @ {timeframe}')
             return {}
 
-        if len(self.open_positions) >= MAX_POSITIONS:
-            logger.info(f'{self.name}: Max positions reached ({MAX_POSITIONS})')
+        tf_max_pos = TF_MAX_POSITIONS.get(timeframe, MAX_POSITIONS)
+        tf_open = sum(1 for p in self.open_positions.values() if p.get('timeframe') == timeframe)
+        if tf_open >= tf_max_pos:
+            logger.info(f'{self.name}: Max {timeframe} positions reached ({tf_open}/{tf_max_pos})')
+            return {}
+
+        if len(self.open_positions) >= MAX_POSITIONS * 3:
+            logger.info(f'{self.name}: Global max positions reached ({len(self.open_positions)})')
             return {}
 
         if risk_governor_result and not risk_governor_result.get('passed', True):
@@ -76,8 +83,11 @@ class BaseAgent(ABC):
 
         order_id = uuid.uuid4().hex[:8]
         side = signal['side']
-        stop_loss = current_price * (1 - signal['stop_loss_pct']) if side == 'BUY' else current_price * (1 + signal['stop_loss_pct'])
-        take_profit = current_price * (1 + signal['take_profit_pct']) if side == 'BUY' else current_price * (1 - signal['take_profit_pct'])
+        tf_mult = TF_SL_MULT.get(timeframe, 1.0)
+        sl_pct = signal['stop_loss_pct'] * tf_mult
+        tp_pct = signal['take_profit_pct'] * tf_mult
+        stop_loss = current_price * (1 - sl_pct) if side == 'BUY' else current_price * (1 + sl_pct)
+        take_profit = current_price * (1 + tp_pct) if side == 'BUY' else current_price * (1 - tp_pct)
 
         features = signal.get('features', {})
         features['ml_prob_win'] = ml_result.get('prob_win', 0.5)
@@ -187,6 +197,7 @@ class BaseAgent(ABC):
 
     def check_exits(self, current_prices: Dict[str, float], regime_at_exit: Optional[str] = None, timeframe: str = None):
         to_close = []
+        now = datetime.now()
         for order_id, position in self.open_positions.items():
             symbol = position['symbol']
             if symbol not in current_prices:
@@ -203,6 +214,13 @@ class BaseAgent(ABC):
                     to_close.append((order_id, price, 'stop_loss'))
                 elif price <= position['take_profit']:
                     to_close.append((order_id, price, 'take_profit'))
+
+            opened_at = datetime.fromisoformat(position.get('opened_at', now.isoformat()))
+            elapsed = (now - opened_at).total_seconds()
+            pos_tf = position.get('timeframe', timeframe or '4h')
+            max_hold = TF_MAX_HOLD.get(pos_tf, 86400)
+            if elapsed > max_hold and order_id not in [t[0] for t in to_close]:
+                to_close.append((order_id, price, 'max_holding_period'))
 
         for order_id, exit_price, reason in to_close:
             self.close_position(order_id, exit_price, reason, regime_at_exit=regime_at_exit)
@@ -334,6 +352,7 @@ class BaseAgent(ABC):
                 'slippage': 0,
                 'attribution_label': 'signal_alpha' if order.get('pnl', 0) > 0 else 'model_error',
                 'stop_out': order.get('stop_out', False),
+                'exit_reason': order.get('close_reason', 'unknown'),
                 'ml_confidence_factor': size_factors.get('ml_confidence', 1.0),
                 'agent_risk_factor': size_factors.get('agent_risk', 1.0),
                 'regime_strength_factor': size_factors.get('regime_strength', 0.5),
