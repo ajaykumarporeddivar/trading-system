@@ -1,5 +1,7 @@
 # arena/arena_runner.py
 import asyncio
+import json
+import os
 import time
 import sys
 from datetime import datetime, date
@@ -53,6 +55,8 @@ class TimeframeCycle:
 
 
 class ArenaRunner:
+    RESTART_STATE_FILE = 'logs/arena_restart_state.json'
+
     def __init__(self, agents: List[BaseAgent], active_timeframes: List[str] = None):
         self.agents = agents
         self.data_agent = DataAgent()
@@ -74,8 +78,47 @@ class ArenaRunner:
             if tf_cfg['tf'] in active_timeframes:
                 self.tf_cycles[tf_cfg['tf']] = TimeframeCycle(tf_cfg)
 
+        self._load_restart_state()
+
         self.current_tf = '4h'
         logger.info(f'ArenaRunner initialized: {len(agents)} agents, {len(self.tf_cycles)} timeframes: {list(self.tf_cycles.keys())}')
+
+    def _save_restart_state(self):
+        try:
+            os.makedirs('logs', exist_ok=True)
+            state = {
+                'cycle_count': self.cycle_count,
+                'last_reset_date': str(self.last_reset_date),
+                'timeframes': {
+                    tf: {'last_run': c.last_run, 'cycle_count': c.cycle_count,
+                         'signals': c.signals_generated, 'orders': c.orders_placed, 'closed': c.trades_closed}
+                    for tf, c in self.tf_cycles.items()
+                }
+            }
+            with open(self.RESTART_STATE_FILE, 'w') as f:
+                json.dump(state, f, indent=2)
+        except Exception as e:
+            logger.error(f'Failed to save restart state: {e}')
+
+    def _load_restart_state(self):
+        try:
+            if os.path.exists(self.RESTART_STATE_FILE):
+                with open(self.RESTART_STATE_FILE, 'r') as f:
+                    state = json.load(f)
+                self.cycle_count = state.get('cycle_count', 0)
+                rd = state.get('last_reset_date')
+                if rd:
+                    self.last_reset_date = date.fromisoformat(rd)
+                for tf, tf_state in state.get('timeframes', {}).items():
+                    if tf in self.tf_cycles:
+                        self.tf_cycles[tf].last_run = tf_state.get('last_run', 0)
+                        self.tf_cycles[tf].cycle_count = tf_state.get('cycle_count', 0)
+                        self.tf_cycles[tf].signals_generated = tf_state.get('signals', 0)
+                        self.tf_cycles[tf].orders_placed = tf_state.get('orders', 0)
+                        self.tf_cycles[tf].trades_closed = tf_state.get('closed', 0)
+                logger.info(f'Restart state loaded: cycle={self.cycle_count}, timeframes restored')
+        except Exception as e:
+            logger.warning(f'Failed to load restart state (starting fresh): {e}')
 
     def run(self):
         logger.info('Multi-timeframe arena loop starting...')
@@ -201,9 +244,11 @@ class ArenaRunner:
                 f'Sentinel: {sentinel_result["status"]} | '
                 f'Signals: {tf_cycle.signals_generated} Orders: {tf_cycle.orders_placed} ==='
             )
+            self._save_restart_state()
 
         except Exception as e:
             logger.error(f'Cycle {self.cycle_count} error at {timeframe}: {e}', exc_info=True)
+            self._save_restart_state()
 
     def _get_agent_states(self) -> List[Dict[str, Any]]:
         states = []
