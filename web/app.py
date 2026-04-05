@@ -350,31 +350,37 @@ def get_mtf_matrix():
 
 
 def get_support_resistance():
+    import ccxt
     from core.config import Config
-    from agents.data_agent import DataAgent
     from engine.indicators import TechnicalIndicators
     from engine.sr_tracker import SRTracker
     result = {}
     sr_tracker = SRTracker()
-    try:
-        data_agent = DataAgent()
-        for symbol in Config.TRADING_SYMBOLS:
-            result[symbol] = {}
-            for tf in ['1m', '5m', '15m', '30m', '1h', '2h', '4h']:
+    exchanges = [
+        (ccxt.gate({'enableRateLimit': True, 'options': {'defaultType': 'spot'}}), 'gate'),
+        (ccxt.okx({'enableRateLimit': True}), 'okx'),
+        (ccxt.kucoin({'enableRateLimit': True, 'options': {'defaultType': 'spot'}}), 'kucoin'),
+        (ccxt.bybit({'enableRateLimit': True, 'options': {'defaultType': 'spot'}}), 'bybit'),
+    ]
+    for symbol in Config.TRADING_SYMBOLS:
+        result[symbol] = {}
+        for tf in ['1m', '5m', '15m', '30m', '1h', '2h', '4h']:
+            fetched = False
+            for ex, label in exchanges:
                 try:
-                    df = data_agent.exchange.fetch_ohlcv(symbol, tf, limit=100)
-                    df = pd.DataFrame(df, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    raw = ex.fetch_ohlcv(symbol, tf, limit=100)
+                    df = pd.DataFrame(raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
                     if len(df) >= 20:
                         sr = TechnicalIndicators.compute_support_resistance(df)
                         sr['bounce_stats'] = sr_tracker.get_stats(symbol, tf)
                         result[symbol][tf] = sr
-                    else:
-                        result[symbol][tf] = {'error': 'Insufficient data'}
+                        fetched = True
+                        break
                 except Exception:
-                    result[symbol][tf] = {'error': 'Data fetch failed'}
-    except Exception as e:
-        logger.error(f'S/R fetch error: {e}')
+                    continue
+            if not fetched:
+                result[symbol][tf] = {'error': 'All exchanges failed'}
     return result
 
 
