@@ -3,19 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Trading Arena V11 — Command Center</title>
+    <title>Trading Arena V11 — Command Center</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
     <div id="app">
         <header>
             <div class="header-left">
-                <h1>Crypto Trading Arena V11</h1>
-                <span class="status-indicator" id="statusIndicator">CONNECTING</span>
-                <span class="status-indicator" id="sseStatus">SSE: OFF</span>
+                <div class="logo">
+                    <span class="logo-mark">TA</span>
+                    <span class="logo-text">Trading Arena <span class="logo-version">V11</span></span>
+                </div>
+                <div class="header-status">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span class="status-text" id="statusIndicator">CONNECTING</span>
+                    <span class="status-divider">|</span>
+                    <span class="status-dot" id="sseDot"></span>
+                    <span class="status-text" id="sseStatus">SSE: OFF</span>
+                </div>
             </div>
             <div class="header-right">
-                <span id="lastUpdate">--</span>
+                <span class="clock" id="clock">--:--:--</span>
+                <span class="last-update" id="lastUpdate">--</span>
                 <button id="refreshBtn" onclick="loadDashboard()">Refresh</button>
                 <div class="c2-dropdown">
                     <button id="c2Btn" class="c2-btn">C2 Controls</button>
@@ -33,6 +42,7 @@
             <div class="card summary-card">
                 <div class="card-label">Total P&L</div>
                 <div class="card-value" id="totalPnl">--</div>
+                <div class="card-sub" id="totalPnlSub"></div>
             </div>
             <div class="card summary-card">
                 <div class="card-label">Total Trades</div>
@@ -41,6 +51,7 @@
             <div class="card summary-card">
                 <div class="card-label">Win Rate</div>
                 <div class="card-value" id="winRate">--</div>
+                <div class="card-bar" id="winRateBar"></div>
             </div>
             <div class="card summary-card">
                 <div class="card-label">Active Agents</div>
@@ -58,25 +69,31 @@
 
         <div class="main-grid">
             <div class="panel full-width">
-                <h2>MTF Matrix — Assets × Timeframes</h2>
+                <div class="panel-header">
+                    <h2>MTF Matrix — Assets x Timeframes</h2>
+                    <span class="panel-sub">Market regime + open positions per cell</span>
+                </div>
                 <div id="mtfMatrix" class="mtf-matrix">
                     <div class="empty">Loading...</div>
                 </div>
             </div>
 
             <div class="panel">
-                <h2>Agent Leaderboard</h2>
+                <div class="panel-header">
+                    <h2>Agent Leaderboard</h2>
+                    <span class="panel-sub">Sorted by P&L</span>
+                </div>
                 <table id="agentTable">
                     <thead>
                         <tr>
-                            <th>Rank</th>
+                            <th class="num">#</th>
                             <th>Agent</th>
                             <th>Strategy</th>
-                            <th>Capital</th>
-                            <th>P&L</th>
-                            <th>Win%</th>
-                            <th>Open</th>
-                            <th>Trades</th>
+                            <th class="num">Capital</th>
+                            <th class="num">P&L</th>
+                            <th class="num">Win%</th>
+                            <th class="num">Open</th>
+                            <th class="num">Trades</th>
                         </tr>
                     </thead>
                     <tbody id="agentTableBody">
@@ -86,16 +103,19 @@
             </div>
 
             <div class="panel">
-                <h2>Recent Signals</h2>
+                <div class="panel-header">
+                    <h2>Recent Signals</h2>
+                    <span class="panel-sub">Last 15 signals</span>
+                </div>
                 <table id="signalsTable">
                     <thead>
                         <tr>
-                            <th>Time</th>
+                            <th class="num">Time</th>
                             <th>TF</th>
                             <th>Agent</th>
                             <th>Symbol</th>
                             <th>Side</th>
-                            <th>ML Prob</th>
+                            <th class="num">ML Prob</th>
                             <th>Gate</th>
                             <th>Regime</th>
                         </tr>
@@ -106,21 +126,24 @@
                 </table>
             </div>
 
-            <div class="panel">
-                <h2>Recent Trades</h2>
+            <div class="panel full-width">
+                <div class="panel-header">
+                    <h2>Recent Trades</h2>
+                    <span class="panel-sub">Last 15 closed positions with sizing details</span>
+                </div>
                 <table id="tradesTable">
                     <thead>
                         <tr>
-                            <th>Time</th>
+                            <th class="num">Time</th>
                             <th>TF</th>
                             <th>Agent</th>
                             <th>Symbol</th>
-                            <th>Entry</th>
-                            <th>Exit</th>
-                            <th>P&L</th>
+                            <th class="num">Entry</th>
+                            <th class="num">Exit</th>
+                            <th class="num">P&L</th>
                             <th>Regime</th>
                             <th>Reason</th>
-                            <th>ML</th>
+                            <th class="num">ML</th>
                         </tr>
                     </thead>
                     <tbody id="tradesTableBody">
@@ -130,17 +153,23 @@
             </div>
 
             <div class="panel">
-                <h2>ML Model Status</h2>
+                <div class="panel-header">
+                    <h2>ML Model Status</h2>
+                    <span class="panel-sub">Current champion model</span>
+                </div>
                 <div id="modelStatus" class="model-status">
                     <span class="empty">Loading...</span>
                 </div>
             </div>
 
             <div class="panel">
-                <h2>Timeframe Performance</h2>
+                <div class="panel-header">
+                    <h2>Timeframe Performance</h2>
+                    <span class="panel-sub">Win rate by timeframe</span>
+                </div>
                 <table id="tfTable">
                     <thead>
-                        <tr><th>TF</th><th>Trades</th><th>Win%</th><th>Avg PnL%</th><th>Total PnL%</th></tr>
+                        <tr><th>TF</th><th class="num">Trades</th><th class="num">Win%</th><th class="num">Avg PnL%</th><th class="num">Total PnL%</th></tr>
                     </thead>
                     <tbody id="tfTableBody">
                         <tr><td colspan="5" class="empty">Loading...</td></tr>
@@ -149,17 +178,23 @@
             </div>
 
             <div class="panel">
-                <h2>V11 Institutional Status</h2>
+                <div class="panel-header">
+                    <h2>V11 Institutional Status</h2>
+                    <span class="panel-sub">Sentinel, governance, drift</span>
+                </div>
                 <div id="v11Status" class="v11-status">
                     <span class="empty">Loading...</span>
                 </div>
             </div>
 
             <div class="panel">
-                <h2>C2 Action Log</h2>
+                <div class="panel-header">
+                    <h2>C2 Action Log</h2>
+                    <span class="panel-sub">Command & Control audit trail</span>
+                </div>
                 <table id="c2LogTable">
                     <thead>
-                        <tr><th>Time</th><th>Action</th><th>Details</th></tr>
+                        <tr><th class="num">Time</th><th>Action</th><th>Details</th></tr>
                     </thead>
                     <tbody id="c2LogTableBody">
                         <tr><td colspan="3" class="empty">No actions yet</td></tr>
@@ -168,30 +203,57 @@
             </div>
 
             <div class="panel full-width">
-                <h2>Support & Resistance — All Timeframes</h2>
+                <div class="panel-header">
+                    <h2>Support & Resistance</h2>
+                    <span class="panel-sub">Pivot levels + projected next candle + bounce win rate</span>
+                </div>
                 <div class="sr-controls">
-                    <select id="srSymbol" onchange="loadSupportResistance()">
-                        <option value="BTC/USDT">BTC</option>
-                        <option value="ETH/USDT">ETH</option>
-                        <option value="SOL/USDT">SOL</option>
-                        <option value="BNB/USDT">BNB</option>
-                        <option value="XRP/USDT">XRP</option>
-                    </select>
-                    <select id="srTimeframe" onchange="loadSupportResistance()">
-                        <option value="1m">1m</option>
-                        <option value="5m">5m</option>
-                        <option value="15m" selected>15m</option>
-                        <option value="30m">30m</option>
-                        <option value="1h">1h</option>
-                        <option value="2h">2h</option>
-                        <option value="4h">4h</option>
-                    </select>
+                    <div class="sr-select-group">
+                        <label>Symbol</label>
+                        <select id="srSymbol" onchange="loadSupportResistance()">
+                            <option value="BTC/USDT">BTC/USDT</option>
+                            <option value="ETH/USDT">ETH/USDT</option>
+                            <option value="SOL/USDT">SOL/USDT</option>
+                            <option value="BNB/USDT">BNB/USDT</option>
+                            <option value="XRP/USDT">XRP/USDT</option>
+                        </select>
+                    </div>
+                    <div class="sr-select-group">
+                        <label>Timeframe</label>
+                        <select id="srTimeframe" onchange="loadSupportResistance()">
+                            <option value="1m">1m</option>
+                            <option value="5m">5m</option>
+                            <option value="15m" selected>15m</option>
+                            <option value="30m">30m</option>
+                            <option value="1h">1h</option>
+                            <option value="2h">2h</option>
+                            <option value="4h">4h</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="srPanel" class="sr-panel">
-                    <span class="empty">Select symbol and timeframe</span>
+                    <div class="sr-grid">
+                        <div class="sr-section">
+                            <div class="sr-section-title">Current Levels</div>
+                            <div id="srLevels" class="sr-levels"></div>
+                        </div>
+                        <div class="sr-section">
+                            <div class="sr-section-title">Projected Next Candle</div>
+                            <div id="srProjected" class="sr-levels"></div>
+                        </div>
+                        <div class="sr-section">
+                            <div class="sr-section-title">Bounce Win Rate</div>
+                            <div id="srBounce" class="sr-levels"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+
+        <footer class="footer">
+            <span class="footer-left">Trading Arena V11 — 6 Agents — 5 Symbols — 7 Timeframes</span>
+            <span class="footer-right">Press <kbd>R</kbd> to refresh · <kbd>H</kbd> to halt · <kbd>Esc</kbd> to close C2</span>
+        </footer>
     </div>
 
     <div id="alertContainer" class="alert-container"></div>
