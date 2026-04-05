@@ -168,32 +168,40 @@ def get_agent_status():
 def get_training_stats():
     training_file = os.path.join(os.path.dirname(__file__), '..', 'orders', 'training_data.jsonl')
     if not os.path.exists(training_file):
-        return {'rows': 0, 'win_rate': 0, 'avg_pnl': 0, 'regime_breakdown': {}, 'enriched_rows': 0}
+        return {'rows': 0, 'win_rate': 0, 'avg_pnl': 0, 'regime_breakdown': {}, 'enriched_rows': 0, 'v11_rows': 0, 'pre_v11_rows': 0}
     rows = []
     with open(training_file, 'r') as f:
         for line in f:
             if line.strip():
                 rows.append(json.loads(line))
     if not rows:
-        return {'rows': 0, 'win_rate': 0, 'avg_pnl': 0, 'regime_breakdown': {}, 'enriched_rows': 0}
-    wins = sum(1 for r in rows if r.get('label') == 1)
-    win_rate = (wins / len(rows) * 100) if rows else 0
-    avg_pnl = sum(r.get('pnl_pct', 0) for r in rows) / len(rows) if rows else 0
+        return {'rows': 0, 'win_rate': 0, 'avg_pnl': 0, 'regime_breakdown': {}, 'enriched_rows': 0, 'v11_rows': 0, 'pre_v11_rows': 0}
+
+    v11_fields = ['regime_at_entry', 'timeframe', 'ml_gate_score']
+    v11_rows = [r for r in rows if all(r.get(f) is not None for f in v11_fields)]
+    pre_v11_rows = [r for r in rows if not all(r.get(f) is not None for f in v11_fields)]
+
+    display_rows = v11_rows if v11_rows else rows
+    wins = sum(1 for r in display_rows if r.get('label') == 1)
+    win_rate = (wins / len(display_rows) * 100) if display_rows else 0
+    avg_pnl = sum(r.get('pnl_pct', 0) for r in display_rows) / len(display_rows) if display_rows else 0
 
     regime_counts = {}
     enriched = 0
-    for r in rows:
+    for r in display_rows:
         regime = r.get('regime_at_entry', 'unknown')
         regime_counts[regime] = regime_counts.get(regime, 0) + 1
-        if r.get('position_size_factors') or r.get('regime_at_exit'):
+        if r.get('regime_at_exit'):
             enriched += 1
 
     return {
-        'rows': len(rows),
+        'rows': len(display_rows),
         'win_rate': round(win_rate, 1),
         'avg_pnl': round(avg_pnl, 2),
         'regime_breakdown': regime_counts,
-        'enriched_rows': enriched
+        'enriched_rows': enriched,
+        'v11_rows': len(v11_rows),
+        'pre_v11_rows': len(pre_v11_rows)
     }
 
 

@@ -126,6 +126,8 @@ def train_model(model_type: str = 'random_forest', use_walk_forward: bool = True
         logger.warning(f'Not enough training data: {len(all_rows)} rows (need 50+)')
         return None
 
+    _purge_old_data()
+
     rows = _filter_quality_rows(all_rows)
     if len(rows) < 50:
         logger.warning(f'Not enough quality rows after filtering: {len(rows)} (need 50+)')
