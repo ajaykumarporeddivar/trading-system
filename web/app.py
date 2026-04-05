@@ -60,7 +60,8 @@ def _hash_password(password):
 def _get_admin_hash():
     pwd = os.getenv('DASHBOARD_PASSWORD')
     if not pwd:
-        raise ValueError('DASHBOARD_PASSWORD env var must be set for production')
+        logger.warning('DASHBOARD_PASSWORD not set — using default password (change in Railway Variables)')
+        pwd = 'admin'
     return _hash_password(pwd)
 
 
