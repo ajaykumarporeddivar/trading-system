@@ -32,7 +32,8 @@ function initSSE() {
     const token = getToken();
     if (!token) return;
 
-    eventSource = new EventSource('/api/stream?token=' + encodeURIComponent(token));
+    document.cookie = 'token=' + encodeURIComponent(token) + '; path=/; SameSite=Strict';
+    eventSource = new EventSource('/api/stream');
 
     eventSource.onopen = () => {
         document.getElementById('sseStatus').textContent = 'SSE: ON';
@@ -172,13 +173,14 @@ async function updateSignalsTable() {
         tbody.innerHTML = signals.slice(0, 15).map(s => {
             const badgeClass = s.verdict === 'BUY' ? 'badge-long' : s.verdict === 'SELL' ? 'badge-short' : 'badge-no_trade';
             const mlBadge = s.ml_approved ? '<span class="badge badge-long">OK</span>' : '<span class="badge badge-short">REJECT</span>';
+            const mlProb = s.ml_prob_win !== undefined ? (s.ml_prob_win * 100).toFixed(0) + '%' : '—';
             return `<tr>
                 <td>${new Date(s.timestamp).toLocaleTimeString()}</td>
                 <td><strong>${s.timeframe || '—'}</strong></td>
                 <td>${s.agent}</td>
                 <td>${s.symbol}</td>
                 <td><span class="badge ${badgeClass}">${s.verdict}</span></td>
-                <td>${s.ml_prob_win}</td>
+                <td>${mlProb}</td>
                 <td>${mlBadge}</td>
                 <td>${s.regime || '—'}</td>
             </tr>`;
@@ -206,10 +208,10 @@ async function updateTradesTable() {
                 <td>${t.symbol}</td>
                 <td>${t.entry_price}</td>
                 <td>${t.exit_price}</td>
-                <td class="${t.pnl >= 0 ? 'positive' : 'negative'}">${t.pnl >= 0 ? '+' : ''}${t.pnl ? t.pnl.toFixed(2) : '0'}</td>
-                <td>${t.regime_entry}→${t.regime_exit}</td>
-                <td>${t.stop_out ? 'STOP' : t.close_reason}</td>
-                <td title="${sizingInfo}">${t.ml_prob_win}</td>
+                <td class="${t.pnl >= 0 ? 'positive' : 'negative'}">${t.pnl >= 0 ? '+' : ''}${t.pnl ? t.pnl.toFixed(2) : '0.00'}</td>
+                <td>${t.regime_entry || '—'}→${t.regime_exit || '—'}</td>
+                <td>${t.stop_out ? 'STOP' : (t.close_reason || '—')}</td>
+                <td title="${sizingInfo}">${t.ml_prob_win !== undefined ? (t.ml_prob_win * 100).toFixed(0) + '%' : '—'}</td>
             </tr>`;
         }).join('');
     } catch (err) { console.error('Trades error:', err); }
@@ -289,13 +291,18 @@ function updateC2Log(actions) {
         tbody.innerHTML = '<tr><td colspan="3" class="empty">No actions yet</td></tr>';
         return;
     }
-    tbody.innerHTML = actions.slice().reverse().map(a => `
+    tbody.innerHTML = actions.slice().reverse().map(a => {
+        let details = '';
+        if (a.details) {
+            details = Object.entries(a.details).map(([k, v]) => k + ': ' + v).join(', ');
+        }
+        return `
         <tr>
             <td>${new Date(a.timestamp).toLocaleString()}</td>
             <td><strong>${a.action}</strong></td>
-            <td>${JSON.stringify(a.details)}</td>
-        </tr>
-    `).join('');
+            <td>${details || '—'}</td>
+        </tr>`;
+    }).join('');
 }
 
 function updateMTFMatrix(data) {
@@ -345,8 +352,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    const overlay = document.getElementById('loginOverlay');
-    if (overlay) overlay.style.display = 'none';
     const app = document.getElementById('app');
     if (app) app.style.display = 'block';
 

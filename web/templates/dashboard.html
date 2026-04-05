@@ -7,18 +7,6 @@
     <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display:none">
-        <div class="login-box">
-            <h1>Crypto Trading Arena V11</h1>
-            <p>Institutional Command Center</p>
-            <form id="loginForm">
-                <input type="password" id="passwordInput" placeholder="Enter password" autocomplete="off" required>
-                <button type="submit">Authenticate</button>
-                <div id="loginError" class="error"></div>
-            </form>
-        </div>
-    </div>
-
     <div id="app">
         <header>
             <div class="header-left">
@@ -30,12 +18,12 @@
                 <span id="lastUpdate">--</span>
                 <button id="refreshBtn" onclick="loadDashboard()">Refresh</button>
                 <div class="c2-dropdown">
-                    <button id="c2Btn" class="c2-btn">⚡ C2 Controls</button>
+                    <button id="c2Btn" class="c2-btn">C2 Controls</button>
                     <div class="c2-menu" id="c2Menu">
-                        <button onclick="c2HaltAll()" class="c2-danger">⛔ Halt All Entries</button>
-                        <button onclick="c2ResumeAll()" class="c2-warn">▶ Resume Trading</button>
-                        <button onclick="c2CloseAll()" class="c2-danger">✕ Close All Positions</button>
-                        <button onclick="c2Retrain()" class="c2-action">⟳ Force ML Retrain</button>
+                        <button onclick="c2HaltAll()" class="c2-danger">Halt All Entries</button>
+                        <button onclick="c2ResumeAll()" class="c2-warn">Resume Trading</button>
+                        <button onclick="c2CloseAll()" class="c2-danger">Close All Positions</button>
+                        <button onclick="c2Retrain()" class="c2-action">Force ML Retrain</button>
                     </div>
                 </div>
             </div>
