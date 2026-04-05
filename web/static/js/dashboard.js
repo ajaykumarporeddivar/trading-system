@@ -254,10 +254,13 @@ function updateTFTable(tfStats) {
         return;
     }
     const order = ['1m', '5m', '15m', '30m', '1h', '2h', '4h'];
-    const sorted = Object.entries(tfStats).sort((a, b) => {
-        const ia = order.indexOf(a[0]), ib = order.indexOf(b[0]);
-        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-    });
+    const sorted = Object.entries(tfStats)
+        .filter(([tf]) => order.includes(tf))
+        .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">No trades yet</td></tr>';
+        return;
+    }
     tbody.innerHTML = sorted.map(([tf, s]) => `
         <tr>
             <td><strong>${tf}</strong></td>
