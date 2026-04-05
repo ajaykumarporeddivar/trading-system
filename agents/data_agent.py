@@ -21,39 +21,50 @@ class DataAgent:
             'enableRateLimit': True,
             'options': {'defaultType': 'spot'}
         })
-        self._fallback_active = False
+
+        self.fallback_exchange = ccxt.bybit({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'spot'}
+        })
+        self._fallback_level = 0
         self.indicators = TechnicalIndicators()
         env_label = 'testnet' if Config.USE_TESTNET else 'live'
-        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({env_label}) with live fallback')
+        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({env_label}) with Bybit fallback')
+
+    def _is_geo_blocked(self, error_str: str) -> bool:
+        return '451' in error_str or 'restricted location' in error_str.lower()
 
     async def fetch_ohlcv(self, symbol: str, timeframe: str = Config.TIMEFRAME, limit: int = 100) -> pd.DataFrame:
-        try:
-            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            if self._fallback_active:
-                logger.info(f'Testnet recovered, using primary exchange')
-                self._fallback_active = False
-            logger.debug(f'Fetched {len(df)} {timeframe} candles for {symbol}')
-            return df
-        except Exception as e:
-            error_str = str(e)
-            if '451' in error_str or 'restricted location' in error_str.lower():
-                if not self._fallback_active:
-                    logger.warning(f'Testnet geo-blocked (451), falling back to live {Config.EXCHANGE} public API')
-                    self._fallback_active = True
-                try:
-                    ohlcv = self.live_exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-                    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                    logger.debug(f'Fetched {len(df)} {timeframe} candles for {symbol} (live fallback)')
-                    return df
-                except Exception as e2:
-                    logger.error(f'Live fallback also failed for {symbol} {timeframe}: {e2}')
-                    return pd.DataFrame()
-            else:
-                logger.error(f'Failed to fetch OHLCV for {symbol} {timeframe}: {e}')
+        exchanges = [
+            (self.exchange, 'primary'),
+            (self.live_exchange, 'binance_live'),
+            (self.fallback_exchange, 'bybit'),
+        ]
+
+        for i, (ex, label) in enumerate(exchanges):
+            try:
+                ohlcv = ex.fetch_ohlcv(symbol, timeframe, limit=limit)
+                df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                if i > self._fallback_level:
+                    self._fallback_level = i
+                    logger.warning(f'Using {label} exchange for market data (level {i})')
+                elif i < self._fallback_level:
+                    self._fallback_level = i
+                    logger.info(f'Recovered to {label} exchange (level {i})')
+                logger.debug(f'Fetched {len(df)} {timeframe} candles for {symbol} ({label})')
+                return df
+            except Exception as e:
+                error_str = str(e)
+                if self._is_geo_blocked(error_str):
+                    logger.warning(f'{label} geo-blocked (451) for {symbol} {timeframe}, trying next...')
+                    continue
+                logger.error(f'Failed to fetch OHLCV for {symbol} {timeframe} ({label}): {e}')
+                if i < len(exchanges) - 1:
+                    continue
                 return pd.DataFrame()
+
+        return pd.DataFrame()
 
     async def compute_indicators_for_tf(self, symbol: str, timeframe: str, limit: int = 100) -> Dict[str, Any]:
         df = await self.fetch_ohlcv(symbol, timeframe, limit)
