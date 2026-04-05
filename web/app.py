@@ -349,6 +349,35 @@ def get_mtf_matrix():
     return {'symbols': symbols, 'timeframes': timeframes, 'cells': matrix}
 
 
+def get_support_resistance():
+    from core.config import Config
+    from agents.data_agent import DataAgent
+    from engine.indicators import TechnicalIndicators
+    from engine.sr_tracker import SRTracker
+    result = {}
+    sr_tracker = SRTracker()
+    try:
+        data_agent = DataAgent()
+        for symbol in Config.TRADING_SYMBOLS:
+            result[symbol] = {}
+            for tf in ['1m', '5m', '15m', '30m', '1h', '2h', '4h']:
+                try:
+                    df = data_agent.exchange.fetch_ohlcv(symbol, tf, limit=100)
+                    df = pd.DataFrame(df, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    if len(df) >= 20:
+                        sr = TechnicalIndicators.compute_support_resistance(df)
+                        sr['bounce_stats'] = sr_tracker.get_stats(symbol, tf)
+                        result[symbol][tf] = sr
+                    else:
+                        result[symbol][tf] = {'error': 'Insufficient data'}
+                except Exception:
+                    result[symbol][tf] = {'error': 'Data fetch failed'}
+    except Exception as e:
+        logger.error(f'S/R fetch error: {e}')
+    return result
+
+
 def get_v11_system_status():
     try:
         from ml.model_registry import ModelRegistry
@@ -554,6 +583,12 @@ def api_v11():
 @require_auth
 def api_mtf_matrix():
     return jsonify(_cached('mtf', get_mtf_matrix, ttl=5))
+
+
+@app.route('/api/support-resistance')
+@require_auth
+def api_support_resistance():
+    return jsonify(_cached('sr', get_support_resistance, ttl=30))
 
 
 @app.route('/api/stream')

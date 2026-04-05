@@ -344,6 +344,60 @@ function updateMTFMatrix(data) {
     container.innerHTML = html;
 }
 
+async function loadSupportResistance() {
+    const symbol = document.getElementById('srSymbol').value;
+    const tf = document.getElementById('srTimeframe').value;
+    const container = document.getElementById('srPanel');
+    if (!container) return;
+    container.innerHTML = '<span class="empty">Loading...</span>';
+    try {
+        const res = await fetchAuth('/api/support-resistance');
+        if (!res) return;
+        const data = await res.json();
+        const sr = data[symbol] && data[symbol][tf] ? data[symbol][tf] : null;
+        if (!sr || sr.error) {
+            container.innerHTML = '<span class="empty">' + (sr ? sr.error : 'No data') + '</span>';
+            return;
+        }
+        let html = '<div class="sr-section-title">Current Levels</div>';
+        sr.levels.forEach(l => {
+            const distStr = l.distance >= 0 ? '+' + l.distance.toFixed(2) + '%' : l.distance.toFixed(2) + '%';
+            html += '<div class="sr-level ' + l.type + '">';
+            html += '<span class="sr-label">' + l.label + '</span>';
+            html += '<span class="sr-value">' + l.level.toLocaleString() + '</span>';
+            html += '<span class="sr-distance ' + (l.distance >= 0 ? 'positive' : 'negative') + '">' + distStr + '</span>';
+            html += '</div>';
+        });
+        html += '<div class="sr-section-title">Projected Next Candle</div>';
+        sr.projected.forEach(p => {
+            const distStr = p.distance >= 0 ? '+' + p.distance.toFixed(2) + '%' : p.distance.toFixed(2) + '%';
+            html += '<div class="sr-level ' + p.type + '">';
+            html += '<span class="sr-label">' + p.label + '</span>';
+            html += '<span class="sr-value">' + p.level.toLocaleString() + '</span>';
+            html += '<span class="sr-distance ' + (p.distance >= 0 ? 'positive' : 'negative') + '">' + distStr + '</span>';
+            html += '</div>';
+        });
+        html += '<div class="sr-section-title">Key Metrics</div>';
+        html += '<div class="sr-level current"><span class="sr-label">Pivot</span><span class="sr-value">' + sr.pivot.toLocaleString() + '</span><span class="sr-distance">—</span></div>';
+        html += '<div class="sr-level current"><span class="sr-label">ATR 14</span><span class="sr-value">' + sr.atr_14.toLocaleString() + '</span><span class="sr-distance">—</span></div>';
+        html += '<div class="sr-level current"><span class="sr-label">Swing H</span><span class="sr-value">' + sr.swing_high.toLocaleString() + '</span><span class="sr-distance">—</span></div>';
+        html += '<div class="sr-level current"><span class="sr-label">Swing L</span><span class="sr-value">' + sr.swing_low.toLocaleString() + '</span><span class="sr-distance">—</span></div>';
+        if (sr.bounce_stats && Object.keys(sr.bounce_stats).length > 0) {
+            html += '<div class="sr-section-title">Bounce Win Rate</div>';
+            Object.entries(sr.bounce_stats).forEach(function(label, stats) {
+                var s = sr.bounce_stats[label];
+                var wrClass = s.win_rate >= 60 ? 'positive' : s.win_rate >= 40 ? 'neutral' : 'negative';
+                html += '<div class="sr-level current"><span class="sr-label">' + label + '</span>';
+                html += '<span class="sr-value">' + s.tests + 'T / ' + s.bounces + 'B / ' + s.breaks + 'Br</span>';
+                html += '<span class="sr-distance ' + wrClass + '">' + s.win_rate + '%</span></div>';
+            });
+        }
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<span class="empty">Error: ' + err.message + '</span>';
+    }
+}
+
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', async () => {
     const loggedIn = await autoLogin();
@@ -357,8 +411,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     loadDashboard();
     loadMTFMatrix();
+    loadSupportResistance();
     initSSE();
 
     setInterval(loadDashboard, 10000);
     setInterval(loadMTFMatrix, 15000);
+    setInterval(loadSupportResistance, 30000);
 });

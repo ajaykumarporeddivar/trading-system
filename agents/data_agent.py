@@ -121,6 +121,8 @@ class DataAgent:
         if df.empty:
             return {}
         indicator_data = self.indicators.compute_all(df)
+        sr_data = self.indicators.compute_support_resistance(df)
+        indicator_data['support_resistance'] = sr_data
         indicator_data['symbol'] = symbol
         indicator_data['timeframe'] = timeframe
         indicator_data['timestamp'] = pd.Timestamp.now().isoformat()

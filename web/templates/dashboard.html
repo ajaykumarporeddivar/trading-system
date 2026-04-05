@@ -166,6 +166,31 @@
                     </tbody>
                 </table>
             </div>
+
+            <div class="panel full-width">
+                <h2>Support & Resistance — All Timeframes</h2>
+                <div class="sr-controls">
+                    <select id="srSymbol" onchange="loadSupportResistance()">
+                        <option value="BTC/USDT">BTC</option>
+                        <option value="ETH/USDT">ETH</option>
+                        <option value="SOL/USDT">SOL</option>
+                        <option value="BNB/USDT">BNB</option>
+                        <option value="XRP/USDT">XRP</option>
+                    </select>
+                    <select id="srTimeframe" onchange="loadSupportResistance()">
+                        <option value="1m">1m</option>
+                        <option value="5m">5m</option>
+                        <option value="15m" selected>15m</option>
+                        <option value="30m">30m</option>
+                        <option value="1h">1h</option>
+                        <option value="2h">2h</option>
+                        <option value="4h">4h</option>
+                    </select>
+                </div>
+                <div id="srPanel" class="sr-panel">
+                    <span class="empty">Select symbol and timeframe</span>
+                </div>
+            </div>
         </div>
     </div>
 

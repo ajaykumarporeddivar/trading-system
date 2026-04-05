@@ -17,6 +17,7 @@ from core.risk_governor import RiskGovernor
 from core.diagnostics_engine import DiagnosticsEngine
 from core.execution_logger import ExecutionLogger
 from core.logger import logger
+from engine.sr_tracker import SRTracker
 
 
 class TimeframeCycle:
@@ -68,6 +69,7 @@ class ArenaRunner:
         self.risk_governor = RiskGovernor(total_capital=total_capital)
         self.diagnostics = DiagnosticsEngine()
         self.execution_logger = ExecutionLogger()
+        self.sr_tracker = SRTracker()
 
         if active_timeframes is None:
             active_timeframes = ['1m', '5m', '15m', '30m', '1h', '2h', '4h']
@@ -167,6 +169,18 @@ class ArenaRunner:
 
             market_overview = await self.data_agent.get_market_overview()
             current_prices = {sym: data.get('current_price', 0) for sym, data in market_data_raw.items()}
+
+            self.sr_tracker.resolve_pending(SYMBOLS[0], timeframe, current_prices)
+            for symbol, indicators in market_data_raw.items():
+                sr = indicators.get('support_resistance', {})
+                for level in sr.get('levels', []):
+                    dist = abs(level['distance'])
+                    if dist < 0.5:
+                        self.sr_tracker.record_test(
+                            symbol, timeframe, level['label'],
+                            level['level'], indicators['current_price'],
+                            datetime.now().isoformat()
+                        )
 
             regime_info = self.regime_classifier.classify(market_data_raw.get(SYMBOLS[0], {}))
             self.regime_classifier.update_vol_history(regime_info['metrics'].get('realized_vol', 0.02))
