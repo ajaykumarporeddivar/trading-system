@@ -110,8 +110,8 @@ async function loadDashboard() {
     const data = await res.json();
     updateSummary(data.summary);
     updateAgentTable(data.agents);
-    updateSignalsTable();
-    updateTradesTable();
+    updateSignalsTable(data.signals || []);
+    updateTradesTable(data.trades || []);
     updateModelStatus(data.model);
     updateTFTable((data.v11 || {}).timeframe_stats || {});
     updateV11Status(data.v11);
@@ -170,63 +170,55 @@ function updateAgentTable(agents) {
     `).join('');
 }
 
-async function updateSignalsTable() {
-    try {
-        const res = await fetchAuth('/api/signals');
-        if (!res) return;
-        const signals = await res.json();
-        const tbody = document.getElementById('signalsTableBody');
-        if (signals.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="empty">No signals yet</td></tr>';
-            return;
-        }
-        tbody.innerHTML = signals.slice(0, 15).map(s => {
-            const bc = s.verdict === 'BUY' ? 'badge-long' : s.verdict === 'SELL' ? 'badge-short' : 'badge-no_trade';
-            const ml = s.ml_approved ? '<span class="badge badge-long">OK</span>' : '<span class="badge badge-short">REJECT</span>';
-            const mp = s.ml_prob_win !== undefined ? (s.ml_prob_win * 100).toFixed(0) + '%' : '—';
-            return `<tr>
-                <td class="num">${new Date(s.timestamp).toLocaleTimeString()}</td>
-                <td>${s.timeframe || '—'}</td>
-                <td>${s.agent}</td>
-                <td>${s.symbol}</td>
-                <td><span class="badge ${bc}">${s.verdict}</span></td>
-                <td class="num">${mp}</td>
-                <td>${ml}</td>
-                <td>${s.regime || '—'}</td>
-            </tr>`;
-        }).join('');
-    } catch (err) { console.error('Signals error:', err); }
+function updateSignalsTable(signals) {
+    const tbody = document.getElementById('signalsTableBody');
+    if (!tbody) return;
+    if (!signals || signals.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">No signals yet</td></tr>';
+        return;
+    }
+    tbody.innerHTML = signals.slice(0, 15).map(s => {
+        const bc = s.verdict === 'BUY' ? 'badge-long' : s.verdict === 'SELL' ? 'badge-short' : 'badge-no_trade';
+        const ml = s.ml_approved ? '<span class="badge badge-long">OK</span>' : '<span class="badge badge-short">REJECT</span>';
+        const mp = s.ml_prob_win !== undefined ? (s.ml_prob_win * 100).toFixed(0) + '%' : '—';
+        return `<tr>
+            <td class="num">${new Date(s.timestamp).toLocaleTimeString()}</td>
+            <td>${s.timeframe || '—'}</td>
+            <td>${s.agent}</td>
+            <td>${s.symbol}</td>
+            <td><span class="badge ${bc}">${s.verdict}</span></td>
+            <td class="num">${mp}</td>
+            <td>${ml}</td>
+            <td>${s.regime || '—'}</td>
+        </tr>`;
+    }).join('');
 }
 
-async function updateTradesTable() {
-    try {
-        const res = await fetchAuth('/api/trades');
-        if (!res) return;
-        const trades = await res.json();
-        const tbody = document.getElementById('tradesTableBody');
-        if (trades.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="empty">No trades yet</td></tr>';
-            return;
-        }
-        tbody.innerHTML = trades.slice(0, 15).map(t => {
-            const sf = t.size_factors || {};
-            const sz = `ml:${(sf.ml_confidence||1).toFixed(1)} reg:${(sf.regime_strength||0.5).toFixed(1)} vol:${(sf.vol_scalar||1).toFixed(1)}`;
-            const pnl = t.pnl !== undefined && t.pnl !== null ? (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(2) : '0.00';
-            const ml = t.ml_prob_win !== undefined ? (t.ml_prob_win * 100).toFixed(0) + '%' : '—';
-            return `<tr>
-                <td class="num">${new Date(t.timestamp).toLocaleTimeString()}</td>
-                <td>${t.timeframe || '—'}</td>
-                <td>${t.agent}</td>
-                <td>${t.symbol}</td>
-                <td class="num">${t.entry_price}</td>
-                <td class="num">${t.exit_price}</td>
-                <td class="num ${t.pnl >= 0 ? 'positive' : 'negative'}">${pnl}</td>
-                <td>${t.regime_entry || '—'}→${t.regime_exit || '—'}</td>
-                <td>${t.stop_out ? 'STOP' : (t.close_reason || '—')}</td>
-                <td class="num" title="${sz}">${ml}</td>
-            </tr>`;
-        }).join('');
-    } catch (err) { console.error('Trades error:', err); }
+function updateTradesTable(trades) {
+    const tbody = document.getElementById('tradesTableBody');
+    if (!tbody) return;
+    if (!trades || trades.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="empty">No trades yet</td></tr>';
+        return;
+    }
+    tbody.innerHTML = trades.slice(0, 15).map(t => {
+        const sf = t.size_factors || {};
+        const sz = `ml:${(sf.ml_confidence||1).toFixed(1)} reg:${(sf.regime_strength||0.5).toFixed(1)} vol:${(sf.vol_scalar||1).toFixed(1)}`;
+        const pnl = t.pnl !== undefined && t.pnl !== null ? (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(2) : '0.00';
+        const ml = t.ml_prob_win !== undefined ? (t.ml_prob_win * 100).toFixed(0) + '%' : '—';
+        return `<tr>
+            <td class="num">${new Date(t.timestamp).toLocaleTimeString()}</td>
+            <td>${t.timeframe || '—'}</td>
+            <td>${t.agent}</td>
+            <td>${t.symbol}</td>
+            <td class="num">${t.entry_price}</td>
+            <td class="num">${t.exit_price}</td>
+            <td class="num ${t.pnl >= 0 ? 'positive' : 'negative'}">${pnl}</td>
+            <td>${t.regime_entry || '—'}→${t.regime_exit || '—'}</td>
+            <td>${t.stop_out ? 'STOP' : (t.close_reason || '—')}</td>
+            <td class="num" title="${sz}">${ml}</td>
+        </tr>`;
+    }).join('');
 }
 
 function updateModelStatus(model) {

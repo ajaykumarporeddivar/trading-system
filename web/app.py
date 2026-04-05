@@ -522,6 +522,8 @@ def api_dashboard():
     health = _cached('health', check_system_health, ttl=10)
     model = _cached('model', get_model_status, ttl=30)
     v11 = _cached('v11', get_v11_system_status, ttl=10)
+    signals = _cached('signals', get_recent_signals, ttl=3)
+    trades = _cached('trades', get_recent_trades, ttl=3)
     total_pnl = sum(a['total_pnl'] for a in agents.values())
     total_trades = sum(a['closed_trades'] for a in agents.values())
     total_wins = sum(a['wins'] for a in agents.values())
@@ -540,7 +542,9 @@ def api_dashboard():
         },
         'training': training,
         'model': model,
-        'v11': v11
+        'v11': v11,
+        'signals': signals,
+        'trades': trades
     })
 
 
