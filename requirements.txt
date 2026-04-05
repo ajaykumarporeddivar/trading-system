@@ -29,3 +29,6 @@ PyJWT>=2.8.0
 
 # Utilities
 pytz>=2023.3
+
+# Data fallback (when exchanges geo-block)
+yfinance>=0.2.31

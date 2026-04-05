@@ -1,9 +1,29 @@
 import ccxt
+import yfinance as yf
 import pandas as pd
 from typing import Dict, List, Any, Optional
 from core.config import Config
 from core.logger import logger
 from engine.indicators import TechnicalIndicators
+
+SYMBOL_TO_YF = {
+    'BTC/USDT': 'BTC-USD',
+    'ETH/USDT': 'ETH-USD',
+    'SOL/USDT': 'SOL-USD',
+    'BNB/USDT': 'BNB-USD',
+    'XRP/USDT': 'XRP-USD',
+}
+
+TF_TO_YF = {
+    '1m': '1m',
+    '5m': '5m',
+    '15m': '15m',
+    '30m': '30m',
+    '1h': '1h',
+    '2h': '2h',
+    '4h': '1d',
+    '1d': '1d',
+}
 
 class DataAgent:
     def __init__(self):
@@ -29,12 +49,37 @@ class DataAgent:
             ('kucoin', ccxt.kucoin({'enableRateLimit': True, 'options': {'defaultType': 'spot'}})),
         ]
         self._fallback_level = 0
+        self._yfinance_warned = False
         self.indicators = TechnicalIndicators()
         env_label = 'testnet' if Config.USE_TESTNET else 'live'
-        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({env_label}) with 4 fallback exchanges')
+        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({env_label}) with 4 exchange + yfinance fallback')
 
     def _is_geo_blocked(self, error_str: str) -> bool:
         return any(x in error_str for x in ['451', '403', 'restricted location', 'cloudfront', 'blocked'])
+
+    def _fetch_yfinance_ohlcv(self, symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
+        yf_symbol = SYMBOL_TO_YF.get(symbol)
+        yf_interval = TF_TO_YF.get(timeframe, '1h')
+        if not yf_symbol:
+            return pd.DataFrame()
+        try:
+            ticker = yf.Ticker(yf_symbol)
+            df = ticker.history(period=f'{min(limit * 2, 730)}d', interval=yf_interval)
+            if df.empty:
+                return pd.DataFrame()
+            df = df.reset_index()
+            df.columns = [c.lower() for c in df.columns]
+            if 'date' in df.columns:
+                df = df.rename(columns={'date': 'timestamp'})
+            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].tail(limit)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+            if not self._yfinance_warned:
+                logger.warning('Using yfinance for market data (all exchanges blocked)')
+                self._yfinance_warned = True
+            return df
+        except Exception as e:
+            logger.error(f'yfinance failed for {symbol} {timeframe}: {e}')
+            return pd.DataFrame()
 
     async def fetch_ohlcv(self, symbol: str, timeframe: str = Config.TIMEFRAME, limit: int = 100) -> pd.DataFrame:
         exchanges = [
@@ -63,9 +108,9 @@ class DataAgent:
                 logger.error(f'Failed to fetch OHLCV for {symbol} {timeframe} ({label}): {e}')
                 if i < len(exchanges) - 1:
                     continue
-                return pd.DataFrame()
 
-        return pd.DataFrame()
+        logger.warning(f'All exchanges blocked for {symbol} {timeframe}, using yfinance fallback')
+        return self._fetch_yfinance_ohlcv(symbol, timeframe, limit)
 
     async def compute_indicators_for_tf(self, symbol: str, timeframe: str, limit: int = 100) -> Dict[str, Any]:
         df = await self.fetch_ohlcv(symbol, timeframe, limit)
