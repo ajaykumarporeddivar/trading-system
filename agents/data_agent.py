@@ -149,17 +149,19 @@ class DataAgent:
     async def get_market_overview(self) -> Dict[str, Any]:
         tickers = {}
         for symbol in Config.TRADING_SYMBOLS:
-            try:
-                ticker = self.exchange.fetch_ticker(symbol)
-                tickers[symbol] = {
-                    'price': ticker['last'],
-                    'change_24h': ticker.get('percentage', 0),
-                    'volume_24h': ticker.get('baseVolume', 0),
-                    'high_24h': ticker.get('high', 0),
-                    'low_24h': ticker.get('low', 0)
-                }
-            except Exception as e:
-                logger.error(f'Failed to fetch ticker for {symbol}: {e}')
+            for ex, label in [(self.exchange, 'primary'), (self.live_exchange, 'live')] + [(ex, name) for name, ex in self.fallback_exchanges]:
+                try:
+                    ticker = ex.fetch_ticker(symbol)
+                    tickers[symbol] = {
+                        'price': ticker['last'],
+                        'change_24h': ticker.get('percentage', 0),
+                        'volume_24h': ticker.get('baseVolume', 0),
+                        'high_24h': ticker.get('high', 0),
+                        'low_24h': ticker.get('low', 0)
+                    }
+                    break
+                except Exception:
+                    continue
         return tickers
 
     async def get_balance(self) -> Dict[str, Any]:
@@ -172,5 +174,7 @@ class DataAgent:
                 'used': usdt['total'] - usdt['free']
             }
         except Exception as e:
+            if self._is_geo_blocked(str(e)):
+                return {'free': 0, 'total': 0, 'used': 0, 'note': 'Paper trading mode'}
             logger.error(f'Failed to fetch balance: {e}')
             return {'free': 0, 'total': 0, 'used': 0}
