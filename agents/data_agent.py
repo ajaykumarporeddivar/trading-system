@@ -1,5 +1,4 @@
 import ccxt
-import yfinance as yf
 import pandas as pd
 from typing import Dict, List, Any, Optional
 from core.config import Config
@@ -58,6 +57,11 @@ class DataAgent:
         return any(x in error_str for x in ['451', '403', 'restricted location', 'cloudfront', 'blocked'])
 
     def _fetch_yfinance_ohlcv(self, symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
+        try:
+            import yfinance as yf
+        except ImportError:
+            logger.error('yfinance not installed, skipping fallback')
+            return pd.DataFrame()
         yf_symbol = SYMBOL_TO_YF.get(symbol)
         yf_interval = TF_TO_YF.get(timeframe, '1h')
         if not yf_symbol:
