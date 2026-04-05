@@ -22,6 +22,9 @@ FEATURE_PRUNE_BOTTOM = 0.20
 V11_MIN_ROWS = 250
 V11_REQUIRED_FIELDS = ['regime_at_entry', 'timeframe', 'ml_gate_score']
 
+QUALITY_AGENTS = {'AJAY', 'RAMA'}
+MIN_PNL_PCT_FOR_WIN = 0.10
+
 
 def load_training_data(filepath: str = TRAINING_EXPORT) -> List[Dict[str, Any]]:
     if not os.path.exists(filepath):
@@ -98,25 +101,35 @@ def align_features(X: List[Dict[str, Any]]):
     return np.array(X_array), all_keys
 
 
+def _filter_quality_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    quality = []
+    excluded_agents = 0
+    for r in rows:
+        agent = r.get('agent', '')
+        if agent not in QUALITY_AGENTS:
+            excluded_agents += 1
+            continue
+        quality.append(r)
+
+    if excluded_agents:
+        logger.info(f'Quality filter: excluded {excluded_agents} rows from non-quality agents (kept {QUALITY_AGENTS})')
+
+    wins = sum(1 for r in quality if r.get('label') == 1)
+    wr = wins / len(quality) * 100 if quality else 0
+    logger.info(f'Quality rows: {len(quality)} ({wins}W/{len(quality)-wins}L, {wr:.1f}% WR)')
+    return quality
+
+
 def train_model(model_type: str = 'random_forest', use_walk_forward: bool = True, prune_features: bool = True, v11_only: bool = True):
     all_rows = load_training_data()
     if len(all_rows) < 50:
         logger.warning(f'Not enough training data: {len(all_rows)} rows (need 50+)')
         return None
 
-    v11_rows = [r for r in all_rows if _is_v11_row(r)]
-    old_rows = [r for r in all_rows if not _is_v11_row(r)]
-
-    if v11_only and len(v11_rows) >= V11_MIN_ROWS:
-        rows = v11_rows
-        logger.info(f'V11-only mode: using {len(rows)} enriched rows (purged {len(old_rows)} pre-V11 rows)')
-        _purge_old_data()
-    elif v11_only and len(v11_rows) > 0:
-        rows = all_rows
-        logger.info(f'Mixed mode: {len(v11_rows)} V11 + {len(old_rows)} pre-V11 rows ({len(all_rows)} total). Switches to V11-only at {V11_MIN_ROWS} rows.')
-    else:
-        rows = all_rows
-        logger.info(f'Pre-V11 mode: {len(rows)} rows with basic features only')
+    rows = _filter_quality_rows(all_rows)
+    if len(rows) < 50:
+        logger.warning(f'Not enough quality rows after filtering: {len(rows)} (need 50+)')
+        return None
 
     if use_walk_forward and len(rows) > WALK_FORWARD_WINDOW:
         rows = rows[-WALK_FORWARD_WINDOW:]
@@ -129,6 +142,9 @@ def train_model(model_type: str = 'random_forest', use_walk_forward: bool = True
 
     X_array, feature_names = align_features(X_dicts)
     y_array = np.array(y)
+
+    win_rate = sum(y_array) / len(y_array)
+    logger.info(f'Training on {len(rows)} quality rows, label win rate: {win_rate:.1%}')
 
     if prune_features and len(feature_names) > 10:
         X_array, feature_names, pruned_count = _prune_weak_features(X_array, feature_names, y_array)
