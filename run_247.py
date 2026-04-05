@@ -173,7 +173,7 @@ def main():
     )
     retrain_scheduler.start()
 
-    dashboard_port = int(os.getenv('DASHBOARD_PORT', '5000'))
+    dashboard_port = int(os.getenv('DASHBOARD_PORT', os.getenv('PORT', '5000')))
     dashboard_thread = threading.Thread(
         target=lambda: web_app.run(host='0.0.0.0', port=dashboard_port, debug=False, use_reloader=False),
         daemon=True
