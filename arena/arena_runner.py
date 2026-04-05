@@ -201,13 +201,16 @@ class ArenaRunner:
                 prev_price = overview.get('low_24h', indicators.get('current_price', 0))
                 change_pct = ((indicators['current_price'] - prev_price) / prev_price * 100) if prev_price else 0
 
+                sr_data = indicators.get('support_resistance', {})
+
                 market_data[symbol] = {
                     'symbol': symbol,
                     'price': indicators['current_price'],
                     'change_pct': change_pct,
                     'indicators': indicators,
                     'regime': regime_info,
-                    'timeframe': timeframe
+                    'timeframe': timeframe,
+                    'sr_levels': sr_data
                 }
 
             for agent in self.agents:

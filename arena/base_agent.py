@@ -97,6 +97,8 @@ class BaseAgent(ABC):
         features['vol_scalar'] = vol_scalar
         features['timeframe'] = timeframe
 
+        sr_levels = signal.get('sr_levels', {})
+
         order = {
             'order_id': order_id,
             'agent': self.name,
@@ -133,6 +135,7 @@ class BaseAgent(ABC):
                 'regime_strength': regime_strength,
                 'vol_scalar': vol_scalar
             },
+            'sr_at_entry': sr_levels,
             'features': features
         }
 
