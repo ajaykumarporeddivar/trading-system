@@ -496,6 +496,11 @@ def api_agents():
     return jsonify(_cached('agents', get_agent_status, ttl=5))
 
 
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()})
+
+
 @app.route('/api/health')
 @require_auth
 def api_health():
