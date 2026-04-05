@@ -16,20 +16,44 @@ class DataAgent:
         if Config.USE_TESTNET:
             if Config.EXCHANGE == 'binance':
                 self.exchange.set_sandbox_mode(True)
+
+        self.live_exchange = getattr(ccxt, Config.EXCHANGE)({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'spot'}
+        })
+        self._fallback_active = False
         self.indicators = TechnicalIndicators()
         env_label = 'testnet' if Config.USE_TESTNET else 'live'
-        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({env_label})')
+        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({env_label}) with live fallback')
 
     async def fetch_ohlcv(self, symbol: str, timeframe: str = Config.TIMEFRAME, limit: int = 100) -> pd.DataFrame:
         try:
             ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            if self._fallback_active:
+                logger.info(f'Testnet recovered, using primary exchange')
+                self._fallback_active = False
             logger.debug(f'Fetched {len(df)} {timeframe} candles for {symbol}')
             return df
         except Exception as e:
-            logger.error(f'Failed to fetch OHLCV for {symbol} {timeframe}: {e}')
-            return pd.DataFrame()
+            error_str = str(e)
+            if '451' in error_str or 'restricted location' in error_str.lower():
+                if not self._fallback_active:
+                    logger.warning(f'Testnet geo-blocked (451), falling back to live {Config.EXCHANGE} public API')
+                    self._fallback_active = True
+                try:
+                    ohlcv = self.live_exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+                    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    logger.debug(f'Fetched {len(df)} {timeframe} candles for {symbol} (live fallback)')
+                    return df
+                except Exception as e2:
+                    logger.error(f'Live fallback also failed for {symbol} {timeframe}: {e2}')
+                    return pd.DataFrame()
+            else:
+                logger.error(f'Failed to fetch OHLCV for {symbol} {timeframe}: {e}')
+                return pd.DataFrame()
 
     async def compute_indicators_for_tf(self, symbol: str, timeframe: str, limit: int = 100) -> Dict[str, Any]:
         df = await self.fetch_ohlcv(symbol, timeframe, limit)
