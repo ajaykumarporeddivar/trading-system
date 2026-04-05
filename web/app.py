@@ -21,7 +21,11 @@ app = Flask(__name__,
             static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 CORS(app)
 
-app.config['SECRET_KEY'] = os.getenv('DASHBOARD_SECRET', 'trading-system-v11-secret-key-2026')
+app.config['SECRET_KEY'] = os.getenv('DASHBOARD_SECRET')
+if not app.config['SECRET_KEY']:
+    import secrets
+    app.config['SECRET_KEY'] = secrets.token_hex(32)
+    logger.warning('DASHBOARD_SECRET not set — using random secret (sessions will invalidate on restart)')
 JWT_EXPIRY = 24
 
 _cache = {}
@@ -51,7 +55,10 @@ def _hash_password(password):
 
 
 def _get_admin_hash():
-    return _hash_password(os.getenv('DASHBOARD_PASSWORD', 'admin'))
+    pwd = os.getenv('DASHBOARD_PASSWORD')
+    if not pwd:
+        raise ValueError('DASHBOARD_PASSWORD env var must be set for production')
+    return _hash_password(pwd)
 
 
 def require_auth(f):

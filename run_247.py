@@ -129,8 +129,9 @@ def print_status(state):
     print(f'  Last Start:        {state.get("last_start", "N/A")}')
     print(f'  Training Data:     {len(training_rows)} rows')
     print(f'  ML Model:          {model_status.get("status", "N/A")}')
-    if model_status.get('metrics'):
-        print(f'  ML Accuracy:       {model_status["metrics"].get("accuracy", 0):.3f}')
+    metrics = model_status.get('metrics')
+    if metrics:
+        print(f'  ML Accuracy:       {metrics.get("accuracy", 0):.3f}')
     print(f'{"=" * 60}\n')
 
 

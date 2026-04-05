@@ -91,8 +91,8 @@ def print_dashboard():
 
         sorted_agents = sorted(agents.items(), key=lambda x: x[1]['total_pnl'], reverse=True)
         for name, stats in sorted_agents:
-            pnl_str = f''
-            print(f'{name:<15} {stats["strategy"]:<20}  {pnl_str:>10} {stats["win_rate"]:>7.1f}% {stats["open_positions"]:>6} {stats["closed_trades"]:>8}')
+            pnl_str = f'{stats["total_pnl"]:+,.0f}'
+            print(f'{name:<15} {stats["strategy"]:<20} ${stats["capital"]:>9,.0f} ${pnl_str:>10} {stats["win_rate"]:>7.1f}% {stats["open_positions"]:>6} {stats["closed_trades"]:>8}')
 
     print('\n' + '-' * 90)
     print(f'  Training Data: {training["rows"]} rows | Win Rate: {training["win_rate"]:.1f}% | Avg PnL: {training["avg_pnl"]:+.2f}%')

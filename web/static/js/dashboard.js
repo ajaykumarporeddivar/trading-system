@@ -1,7 +1,6 @@
 let eventSource = null;
 
 // ==================== AUTH ====================
-const DEFAULT_PASSWORD = 'admin';
 
 function getToken() {
     return localStorage.getItem('token');
@@ -23,20 +22,7 @@ async function fetchAuth(url) {
 
 async function autoLogin() {
     if (getToken()) return true;
-    try {
-        const res = await fetch('/api/login', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({password: DEFAULT_PASSWORD})
-        });
-        if (res.ok) {
-            const data = await res.json();
-            localStorage.setItem('token', data.token);
-            return true;
-        }
-    } catch (err) {
-        console.error('Auto-login failed:', err);
-    }
+    window.location.href = '/login';
     return false;
 }
 

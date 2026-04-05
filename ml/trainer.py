@@ -154,7 +154,8 @@ def train_model(model_type: str = 'random_forest', use_walk_forward: bool = True
             logger.info(f'Feature pruning: removed {pruned_count} weak features, {len(feature_names)} remaining')
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X_array, y_array, test_size=0.2, random_state=42, stratify=y_array
+        X_array, y_array, test_size=0.2, random_state=42,
+        stratify=y_array if len(set(y_array)) > 1 and min(np.bincount(y_array.astype(int))) >= 2 else None
     )
 
     models_to_try = [
@@ -238,13 +239,21 @@ def load_model():
     if not os.path.exists(model_path):
         return None, None
 
-    with open(model_path, 'rb') as f:
-        model = pickle.load(f)
+    try:
+        with open(model_path, 'rb') as f:
+            model = pickle.load(f)
+    except Exception as e:
+        logger.error(f'Failed to load model: {e}')
+        return None, None
 
     metrics_path = METRICS_FILE
     if os.path.exists(metrics_path):
-        with open(metrics_path, 'r') as f:
-            metrics = json.load(f)
+        try:
+            with open(metrics_path, 'r') as f:
+                metrics = json.load(f)
+        except Exception as e:
+            logger.error(f'Failed to load model metrics: {e}')
+            return model, None
     else:
         metrics = None
 
@@ -278,7 +287,7 @@ def predict_signal(features: Dict[str, Any], model=None, metrics=None):
         'prediction': int(prediction),
         'confidence': float(max(probability)),
         'prob_win': float(probability[1]) if len(probability) > 1 else 0.5,
-        'prob_loss': float(probability[0])
+        'prob_loss': float(probability[0]) if len(probability) > 0 else 0.5
     }
 
 

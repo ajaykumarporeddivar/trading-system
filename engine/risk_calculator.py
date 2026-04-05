@@ -68,7 +68,11 @@ class RiskCalculator:
             'position_size': None
         }
 
-        balance = portfolio_state.get('balance', 0)
+        balance = portfolio_state.get('balance', Config.INITIAL_BALANCE)
+        if balance <= 0:
+            result['approved'] = False
+            result['blocks'].append('Invalid balance')
+            return result
         entry_price = trade_data.get('entry_price', 0)
         stop_loss = trade_data.get('stop_loss', 0)
 

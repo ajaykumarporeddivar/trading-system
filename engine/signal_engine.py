@@ -13,7 +13,7 @@ class SignalEngine:
         # EMA Trend
         ema_21 = indicator_data.get('ema_21')
         ema_50 = indicator_data.get('ema_50')
-        if ema_21 and ema_50:
+        if ema_21 is not None and ema_50 is not None:
             if ema_21 > ema_50 and current_price > ema_21:
                 scores['ema_trend'] = 'bullish'
             elif ema_21 < ema_50 and current_price < ema_21:
@@ -25,15 +25,13 @@ class SignalEngine:
 
         # RSI
         rsi = indicator_data.get('rsi_14')
-        if rsi:
+        if rsi is not None:
             if rsi > 70:
                 scores['rsi'] = 'bearish'
             elif rsi < 30:
                 scores['rsi'] = 'bullish'
-            elif rsi > 50:
-                scores['rsi'] = 'bullish'
             else:
-                scores['rsi'] = 'bearish'
+                scores['rsi'] = 'neutral'
         else:
             scores['rsi'] = 'neutral'
 
@@ -41,7 +39,7 @@ class SignalEngine:
         macd = indicator_data.get('macd')
         macd_signal = indicator_data.get('macd_signal')
         macd_hist = indicator_data.get('macd_histogram')
-        if macd and macd_signal:
+        if macd is not None and macd_signal is not None:
             if macd > macd_signal and macd_hist and macd_hist > 0:
                 scores['macd'] = 'bullish'
             elif macd < macd_signal and macd_hist and macd_hist < 0:
@@ -54,7 +52,7 @@ class SignalEngine:
         # Bollinger Bands
         bb_upper = indicator_data.get('bb_upper')
         bb_lower = indicator_data.get('bb_lower')
-        if bb_upper and bb_lower:
+        if bb_upper is not None and bb_lower is not None:
             if current_price > bb_upper:
                 scores['bollinger'] = 'bearish'
             elif current_price < bb_lower:
@@ -66,7 +64,7 @@ class SignalEngine:
 
         # Volume
         vol_ratio = indicator_data.get('volume_ratio')
-        if vol_ratio and vol_ratio > 1.5:
+        if vol_ratio is not None and vol_ratio > 1.5:
             if current_price > indicator_data.get('ema_21', 0):
                 scores['volume'] = 'bullish'
             else:
@@ -77,7 +75,7 @@ class SignalEngine:
         # Stoch RSI
         k = indicator_data.get('stoch_rsi_k')
         d = indicator_data.get('stoch_rsi_d')
-        if k and d:
+        if k is not None and d is not None:
             if k < 20 and k > d:
                 scores['stoch_rsi'] = 'bullish'
             elif k > 80 and k < d:
@@ -89,7 +87,7 @@ class SignalEngine:
 
         # ADX
         adx = indicator_data.get('adx_14')
-        if adx and adx > 25:
+        if adx is not None and adx > 25:
             if current_price > indicator_data.get('ema_21', 0):
                 scores['adx'] = 'bullish'
             else:
