@@ -19,8 +19,8 @@ MODEL_DIR = 'ml/models/'
 METRICS_FILE = 'ml/models/metrics.json'
 WALK_FORWARD_WINDOW = 500
 FEATURE_PRUNE_BOTTOM = 0.20
-V11_MIN_ROWS = 333
-V11_REQUIRED_FIELDS = ['regime_at_entry', 'timeframe', 'position_size_factors', 'ml_gate_score']
+V11_MIN_ROWS = 250
+V11_REQUIRED_FIELDS = ['regime_at_entry', 'timeframe', 'ml_gate_score']
 
 
 def load_training_data(filepath: str = TRAINING_EXPORT) -> List[Dict[str, Any]]:
