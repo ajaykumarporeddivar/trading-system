@@ -22,24 +22,25 @@ class DataAgent:
             'options': {'defaultType': 'spot'}
         })
 
-        self.fallback_exchange = ccxt.bybit({
-            'enableRateLimit': True,
-            'options': {'defaultType': 'spot'}
-        })
+        self.fallback_exchanges = [
+            ('bybit', ccxt.bybit({'enableRateLimit': True, 'options': {'defaultType': 'spot'}})),
+            ('gate', ccxt.gate({'enableRateLimit': True, 'options': {'defaultType': 'spot'}})),
+            ('okx', ccxt.okx({'enableRateLimit': True})),
+            ('kucoin', ccxt.kucoin({'enableRateLimit': True, 'options': {'defaultType': 'spot'}})),
+        ]
         self._fallback_level = 0
         self.indicators = TechnicalIndicators()
         env_label = 'testnet' if Config.USE_TESTNET else 'live'
-        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({env_label}) with Bybit fallback')
+        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({env_label}) with 4 fallback exchanges')
 
     def _is_geo_blocked(self, error_str: str) -> bool:
-        return '451' in error_str or 'restricted location' in error_str.lower()
+        return any(x in error_str for x in ['451', '403', 'restricted location', 'cloudfront', 'blocked'])
 
     async def fetch_ohlcv(self, symbol: str, timeframe: str = Config.TIMEFRAME, limit: int = 100) -> pd.DataFrame:
         exchanges = [
             (self.exchange, 'primary'),
             (self.live_exchange, 'binance_live'),
-            (self.fallback_exchange, 'bybit'),
-        ]
+        ] + [(ex, name) for name, ex in self.fallback_exchanges]
 
         for i, (ex, label) in enumerate(exchanges):
             try:
@@ -57,7 +58,7 @@ class DataAgent:
             except Exception as e:
                 error_str = str(e)
                 if self._is_geo_blocked(error_str):
-                    logger.warning(f'{label} geo-blocked (451) for {symbol} {timeframe}, trying next...')
+                    logger.warning(f'{label} blocked for {symbol} {timeframe}, trying next...')
                     continue
                 logger.error(f'Failed to fetch OHLCV for {symbol} {timeframe} ({label}): {e}')
                 if i < len(exchanges) - 1:
