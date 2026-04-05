@@ -137,10 +137,13 @@ header {
 .main-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    grid-template-rows: repeat(5, 1fr);
+    grid-template-rows: minmax(0, 2fr) repeat(4, minmax(0, 1fr));
     gap: 1px;
     background: var(--border);
     padding: 1px;
+    height: 0;
+    flex: 1;
+    min-height: 0;
 }
 .panel {
     background: var(--bg-secondary);
@@ -167,6 +170,9 @@ header {
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+}
+.panel-body table {
+    margin-bottom: 0;
 }
 .panel-body::-webkit-scrollbar { width: 5px; }
 .panel-body::-webkit-scrollbar-track { background: transparent; }
