@@ -68,6 +68,7 @@
         </div>
 
         <div class="main-grid">
+            <!-- Row 1: MTF Matrix -->
             <div class="panel full-width">
                 <div class="panel-header">
                     <h2>MTF Matrix — Assets x Timeframes</h2>
@@ -80,6 +81,7 @@
                 </div>
             </div>
 
+            <!-- Row 2: Agent Leaderboard | Timeframe Performance -->
             <div class="panel">
                 <div class="panel-header">
                     <h2>Agent Leaderboard</h2>
@@ -108,6 +110,24 @@
 
             <div class="panel">
                 <div class="panel-header">
+                    <h2>Timeframe Performance</h2>
+                    <span class="panel-sub">Win rate by timeframe</span>
+                </div>
+                <div class="panel-body">
+                    <table id="tfTable">
+                        <thead>
+                            <tr><th>TF</th><th class="num">Trades</th><th class="num">Win%</th><th class="num">Avg PnL%</th><th class="num">Total PnL%</th></tr>
+                        </thead>
+                        <tbody id="tfTableBody">
+                            <tr><td colspan="5" class="empty">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Row 3: Recent Signals | Recent Trades -->
+            <div class="panel">
+                <div class="panel-header">
                     <h2>Recent Signals</h2>
                     <span class="panel-sub">Last 15 signals</span>
                 </div>
@@ -132,7 +152,7 @@
                 </div>
             </div>
 
-            <div class="panel full-width">
+            <div class="panel">
                 <div class="panel-header">
                     <h2>Recent Trades</h2>
                     <span class="panel-sub">Last 15 closed positions with sizing details</span>
@@ -160,6 +180,7 @@
                 </div>
             </div>
 
+            <!-- Row 4: ML Model Status | V11 Institutional Status -->
             <div class="panel">
                 <div class="panel-header">
                     <h2>ML Model Status</h2>
@@ -169,23 +190,6 @@
                     <div id="modelStatus" class="model-status">
                         <span class="empty">Loading...</span>
                     </div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <h2>Timeframe Performance</h2>
-                    <span class="panel-sub">Win rate by timeframe</span>
-                </div>
-                <div class="panel-body">
-                    <table id="tfTable">
-                        <thead>
-                            <tr><th>TF</th><th class="num">Trades</th><th class="num">Win%</th><th class="num">Avg PnL%</th><th class="num">Total PnL%</th></tr>
-                        </thead>
-                        <tbody id="tfTableBody">
-                            <tr><td colspan="5" class="empty">Loading...</td></tr>
-                        </tbody>
-                    </table>
                 </div>
             </div>
 
@@ -201,6 +205,7 @@
                 </div>
             </div>
 
+            <!-- Row 5: C2 Action Log | Support & Resistance -->
             <div class="panel">
                 <div class="panel-header">
                     <h2>C2 Action Log</h2>
@@ -218,7 +223,7 @@
                 </div>
             </div>
 
-            <div class="panel full-width">
+            <div class="panel">
                 <div class="panel-header">
                     <h2>Support & Resistance</h2>
                     <span class="panel-sub">Pivot levels + projected next candle + bounce win rate</span>
