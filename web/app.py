@@ -7,6 +7,7 @@ import time
 import threading
 import queue
 import hashlib
+import logging
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -15,6 +16,8 @@ import numpy as np
 from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 from flask_cors import CORS
 from monitor.health_check import check_system_health
+
+logger = logging.getLogger('trading_system')
 
 app = Flask(__name__,
             template_folder=os.path.join(os.path.dirname(__file__), 'templates'),

@@ -165,6 +165,14 @@ def main():
     state['last_start'] = datetime.now().isoformat()
     save_run_state(state)
 
+    dashboard_port = int(os.getenv('DASHBOARD_PORT', os.getenv('PORT', '5000')))
+    dashboard_thread = threading.Thread(
+        target=lambda: web_app.run(host='0.0.0.0', port=dashboard_port, debug=False, use_reloader=False),
+        daemon=True
+    )
+    dashboard_thread.start()
+    logger.info(f'Web dashboard started on port {dashboard_port}')
+
     agents = create_agents()
     runner = ArenaRunner(agents)
 
@@ -173,14 +181,6 @@ def main():
         min_samples=int(os.getenv('ML_MIN_SAMPLES', '500'))
     )
     retrain_scheduler.start()
-
-    dashboard_port = int(os.getenv('DASHBOARD_PORT', os.getenv('PORT', '5000')))
-    dashboard_thread = threading.Thread(
-        target=lambda: web_app.run(host='0.0.0.0', port=dashboard_port, debug=False, use_reloader=False),
-        daemon=True
-    )
-    dashboard_thread.start()
-    logger.info(f'Web dashboard started on port {dashboard_port}')
 
     logger.info('24/7 Arena engine starting with ML learning...')
     print_status(state)
