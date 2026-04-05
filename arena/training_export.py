@@ -14,27 +14,6 @@ CSV_FIELDS = [
 ]
 
 
-def append_training_row(order: Dict[str, Any]):
-    try:
-        os.makedirs(os.path.dirname(TRAINING_EXPORT) if os.path.dirname(TRAINING_EXPORT) else '.', exist_ok=True)
-        row = {
-            'agent': order['agent'],
-            'strategy': order['strategy'],
-            'symbol': order['symbol'],
-            'side': order['side'],
-            'confidence': order['confidence'],
-            'features': order.get('features', {}),
-            'outcome': order['outcome'],
-            'pnl_pct': order['pnl_pct'],
-            'label': 1 if order['outcome'] == 'WIN' else 0,
-            'timestamp': order['closed_at']
-        }
-        with open(TRAINING_EXPORT, 'a') as f:
-            f.write(json.dumps(row) + '\n')
-    except Exception as e:
-        logger.error(f'Failed to append training row: {e}')
-
-
 def export_performance_csv(agents: List[BaseAgent]):
     try:
         os.makedirs(os.path.dirname(PERF_SUMMARY_CSV) if os.path.dirname(PERF_SUMMARY_CSV) else '.', exist_ok=True)

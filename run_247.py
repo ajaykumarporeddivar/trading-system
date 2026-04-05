@@ -3,7 +3,7 @@ import sys
 import os
 import time
 import json
-import signal
+import threading
 import traceback
 from datetime import datetime, date
 
@@ -18,11 +18,12 @@ from arena.agents.rama import RamaAgent
 from arena.agents.meenakshi import MeenakshiAgent
 from arena.agents.rani import RaniAgent
 from arena.arena_runner import ArenaRunner
-from arena.leaderboard import print_leaderboard
+from arena.leaderboard import print_leaderboard, get_leaderboard_data
 from arena.training_export import export_performance_csv, load_training_data
 from ml.retrain_scheduler import RetrainScheduler
 from ml.trainer import get_model_status
 from core.logger import logger
+from web.app import app as web_app
 
 RUN_STATE_FILE = 'logs/run_state.json'
 CRASH_LOG = 'logs/crash_log.jsonl'
@@ -171,6 +172,14 @@ def main():
         min_samples=int(os.getenv('ML_MIN_SAMPLES', '500'))
     )
     retrain_scheduler.start()
+
+    dashboard_port = int(os.getenv('DASHBOARD_PORT', '5000'))
+    dashboard_thread = threading.Thread(
+        target=lambda: web_app.run(host='0.0.0.0', port=dashboard_port, debug=False, use_reloader=False),
+        daemon=True
+    )
+    dashboard_thread.start()
+    logger.info(f'Web dashboard started on port {dashboard_port}')
 
     logger.info('24/7 Arena engine starting with ML learning...')
     print_status(state)

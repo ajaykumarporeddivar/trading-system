@@ -35,10 +35,10 @@ Total Trades: {stats['total_trades']}
 Wins: {stats['wins']}
 Losses: {stats['losses']}
 Win Rate: {stats['win_rate']}%
-Total P&L: 
-Average P&L: 
-Best Trade: 
-Worst Trade: 
+Total P&L: {stats['total_pnl']}
+Average P&L: {stats['avg_pnl']}
+Best Trade: {stats['best_trade']}
+Worst Trade: {stats['worst_trade']}
 '''
         logger.info('Weekly report generated')
         return report
@@ -78,4 +78,4 @@ Worst Trade:
             'losses': losses
         })
 
-        logger.info(f'Daily stats updated: P&L ')
+        logger.info(f'Daily stats updated: P&L {daily_pnl}')

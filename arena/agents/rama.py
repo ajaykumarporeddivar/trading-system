@@ -2,7 +2,7 @@
 from typing import Dict, Any, Optional
 from arena.base_agent import BaseAgent
 from arena.config import MIN_CONFIDENCE
-from core.logger import logger
+
 
 
 class RamaAgent(BaseAgent):

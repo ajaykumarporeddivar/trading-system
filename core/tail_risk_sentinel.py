@@ -6,6 +6,7 @@ from datetime import datetime
 from core.logger import logger
 
 SENTINEL_LOG = 'logs/sentinel_events.jsonl'
+SENTINEL_STATE_FILE = 'logs/sentinel_state.json'
 
 VAR_LIMIT = 0.05
 VOL_SPIKE_MULTIPLIER = 2.5
@@ -25,6 +26,25 @@ class TailRiskSentinel:
         self._spread_history: List[float] = []
         self._depth_history: List[float] = []
         self._volume_history: List[float] = []
+        self._load_state()
+
+    def _load_state(self):
+        try:
+            if os.path.exists(SENTINEL_STATE_FILE):
+                with open(SENTINEL_STATE_FILE, 'r') as f:
+                    state = json.load(f)
+                self._halted = state.get('halted', False)
+                self._triggers = state.get('triggers', [])
+        except Exception:
+            pass
+
+    def _save_state(self):
+        try:
+            os.makedirs('logs', exist_ok=True)
+            with open(SENTINEL_STATE_FILE, 'w') as f:
+                json.dump({'halted': self._halted, 'triggers': self._triggers}, f)
+        except Exception:
+            pass
 
     def check(self, market_data: Dict[str, Any], agent_states: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         triggers = []
@@ -69,9 +89,10 @@ class TailRiskSentinel:
         }
 
     def clear_halt(self):
-        if not self._triggers:
-            self._halted = False
-            logger.info('Sentinel halt cleared')
+        self._halted = False
+        self._triggers = []
+        self._save_state()
+        logger.info('Sentinel halt cleared')
 
     def force_halt(self, reason: str):
         self._halted = True
@@ -82,6 +103,7 @@ class TailRiskSentinel:
             'timestamp': datetime.now().isoformat()
         }
         self._triggers.append(trigger)
+        self._save_state()
         self._log_triggers([trigger])
         logger.critical(f'Sentinel FORCE HALT: {reason}')
 

@@ -75,15 +75,16 @@ class TechnicalIndicators:
         return tr.ewm(alpha=1/period, min_periods=period).mean()
 
     @staticmethod
-    def fibonacci_levels(price: float) -> Dict[str, float]:
+    def fibonacci_levels(high: float, low: float) -> Dict[str, float]:
+        diff = high - low
         levels = {
-            '0.0': price,
-            '0.236': price * 0.99764,
-            '0.382': price * 0.99618,
-            '0.5': price * 0.995,
-            '0.618': price * 0.99382,
-            '0.786': price * 0.99214,
-            '1.0': price * 0.99
+            '0.0': high,
+            '0.236': high - diff * 0.236,
+            '0.382': high - diff * 0.382,
+            '0.5': high - diff * 0.5,
+            '0.618': high - diff * 0.618,
+            '0.786': high - diff * 0.786,
+            '1.0': low
         }
         return levels
 
@@ -104,7 +105,7 @@ class TechnicalIndicators:
         vol_ratio = TechnicalIndicators.volume_ratio(volume)
         stoch_rsi_data = TechnicalIndicators.stoch_rsi(close)
         adx_14 = TechnicalIndicators.adx(high, low, close)
-        fib_levels = TechnicalIndicators.fibonacci_levels(close.iloc[-1])
+        fib_levels = TechnicalIndicators.fibonacci_levels(high.iloc[-1], low.iloc[-1])
         atr_14 = TechnicalIndicators._atr(high, low, close, 14)
         high_20 = high.rolling(window=20).max()
         low_20 = low.rolling(window=20).min()
@@ -128,7 +129,6 @@ class TechnicalIndicators:
             'adx_14': adx_14.iloc[-1] if len(adx_14) > 0 else None,
             'fibonacci_levels': fib_levels,
             'atr_14': atr_14.iloc[-1] if len(atr_14) > 0 else None,
-            'atr': atr_14.iloc[-1] if len(atr_14) > 0 else None,
             'high_20': high_20.iloc[-1] if len(high_20) > 0 else None,
             'low_20': low_20.iloc[-1] if len(low_20) > 0 else None,
             'current_price': close.iloc[-1]

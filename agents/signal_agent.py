@@ -31,7 +31,7 @@ class SignalAgent:
     async def generate_summary(self, signals: List[Dict[str, Any]]) -> str:
         summary = 'Signal Analysis Summary:\n'
         for s in signals:
-            emoji = '??' if s['verdict'] == 'LONG' else '??' if s['verdict'] == 'SHORT' else '?'
+            emoji = '\U0001F4C8' if s['verdict'] == 'LONG' else '\U0001F4C9' if s['verdict'] == 'SHORT' else '\u23F8'
             summary += f'{emoji} {s["symbol"]}: {s["verdict"]} ({s["confidence"]}%)'
             if s['verdict'] != 'NO_TRADE':
                 summary += f' - Strong signal'

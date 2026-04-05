@@ -1,5 +1,4 @@
 from typing import Dict, Any, List
-from core.config import Config
 from core.logger import logger
 from engine.risk_calculator import RiskCalculator
 from storage.database import TradingJournal
@@ -17,7 +16,7 @@ class RiskAgent:
             logger.info(
                 f'Risk APPROVED: {trade_data.get("symbol")} - '
                 f'Size: {result["position_size"]["quantity"]}, '
-                f'Risk: '
+                f'Risk: {result["position_size"]["risk_amount"]}'
             )
         else:
             logger.warning(

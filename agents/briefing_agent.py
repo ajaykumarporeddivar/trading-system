@@ -20,7 +20,7 @@ class BriefingAgent:
         for symbol, data in market_data.items():
             change = data.get('change_24h', 0)
             direction = '+' if change >= 0 else ''
-            briefing += f'{symbol}:  ({direction}{change:.2f}%)\n'
+            briefing += f'{symbol}: {direction}{change:.2f}%\n'
 
         briefing += '\nTrading Signals:\n'
         for signal in signals:
@@ -29,7 +29,7 @@ class BriefingAgent:
 
         perf = await self.journal.get_performance_report()
         briefing += f'\nPerformance:\n'
-        briefing += f'Total P&L: \n'
+        briefing += f'Total P&L: {perf["total_pnl"]}\n'
         briefing += f'Win Rate: {perf["win_rate"]}%\n'
 
         logger.info('Morning briefing generated')
@@ -50,10 +50,10 @@ class BriefingAgent:
         alert = f'Trade Alert\n{"=" * 40}\n'
         alert += f'Symbol: {trade_data.get("symbol")}\n'
         alert += f'Side: {trade_data.get("side")}\n'
-        alert += f'Entry: \n'
+        alert += f'Entry: {trade_data.get("entry_price")}\n'
         alert += f'Quantity: {trade_data.get("quantity")}\n'
-        alert += f'Stop Loss: \n'
-        alert += f'Take Profit: \n'
+        alert += f'Stop Loss: {trade_data.get("stop_loss")}\n'
+        alert += f'Take Profit: {trade_data.get("take_profit")}\n'
         alert += f'Confidence: {trade_data.get("confidence", 0)}%'
 
         if self.telegram:

@@ -3,7 +3,6 @@ import asyncio
 import json
 import os
 import time
-import sys
 from datetime import datetime, date
 from typing import List, Dict, Any, Optional
 
@@ -126,6 +125,7 @@ class ArenaRunner:
             asyncio.run(self._run_loop())
         except KeyboardInterrupt:
             logger.info('Arena loop interrupted')
+            raise
         except Exception as e:
             logger.error(f'Arena loop error: {e}', exc_info=True)
 

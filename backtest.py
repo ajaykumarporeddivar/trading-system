@@ -10,7 +10,6 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 import ccxt
 import pandas as pd
-from agents.data_agent import DataAgent
 from arena.config import SYMBOLS, ORDER_DIR, MIN_CONFIDENCE
 from arena.agents.ajay import AjayAgent
 from arena.agents.vijay import VijayAgent
@@ -140,7 +139,7 @@ class BacktestSimulator:
         if winner:
             print(f'\nWinner: {winner["agent"]} ({winner["strategy"]})')
             print(f'  Win Rate: {winner["win_rate"]}%')
-            print(f'  Total PnL: ')
+            print(f'  Total PnL: {winner["total_pnl"]}')
             print(f'  Trades: {winner["total_trades"]}')
         else:
             print('\nNo winner yet - need 10+ trades per agent to qualify')

@@ -5,7 +5,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from arena.config import ORDER_DIR, AGENT_COLORS, RESET_COLOR
-from arena.base_agent import BaseAgent
 from arena.arena_runner import ArenaRunner
 from arena.agents.ajay import AjayAgent
 from arena.agents.vijay import VijayAgent
@@ -52,6 +51,9 @@ def main():
     except KeyboardInterrupt:
         print('\nArena stopped.')
         print_final_results(agents)
+    except Exception as e:
+        logger.error(f'Arena error: {e}', exc_info=True)
+        print_final_results(agents)
 
 
 def print_final_results(agents):
@@ -70,7 +72,7 @@ def print_final_results(agents):
     if winner:
         print(f'\nWinner: {winner["agent"]} ({winner["strategy"]})')
         print(f'  Win Rate: {winner["win_rate"]}%')
-        print(f'  Total PnL: ')
+        print(f'  Total PnL: {winner["total_pnl"]}')
         print(f'  Trades: {winner["total_trades"]}')
     else:
         print('\nNo winner yet - need 10+ trades per agent to qualify')

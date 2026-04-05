@@ -31,6 +31,8 @@ body {
     font-size: 13px;
 }
 
+#app { display: none; }
+
 /* LOGIN */
 .login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .login-overlay {

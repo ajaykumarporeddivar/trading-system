@@ -1,6 +1,7 @@
 # ml/canary.py
 import json
 import os
+import numpy as np
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from core.logger import logger

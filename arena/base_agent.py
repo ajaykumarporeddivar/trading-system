@@ -191,7 +191,7 @@ class BaseAgent(ABC):
 
         logger.info(
             f'[{self.name}] {outcome} {order["symbol"]} @ {exit_price} | '
-            f'PnL:  ({pnl_pct:.2f}%) | {reason}'
+            f'PnL: ${pnl:+.2f} ({pnl_pct:.2f}%) | {reason}'
         )
         return order
 
@@ -230,7 +230,7 @@ class BaseAgent(ABC):
         drawdown = (self.peak_capital - self.virtual_capital) / self.peak_capital if self.peak_capital > 0 else 0
 
         if daily_pnl <= -(INITIAL_BALANCE * DAILY_LOSS_CAP):
-            logger.warning(f'{self.name}: HALTED - daily loss cap reached ()')
+            logger.warning(f'{self.name}: HALTED - daily loss cap reached (daily_pnl=${daily_pnl:+.2f})')
             return False
 
         if drawdown >= MAX_DRAWDOWN:
@@ -273,6 +273,9 @@ class BaseAgent(ABC):
     def _load_state(self):
         try:
             if os.path.exists(self.order_db_path):
+                if os.path.getsize(self.order_db_path) == 0:
+                    logger.warning(f'{self.name}: Empty state file at {self.order_db_path}, starting fresh')
+                    return
                 with open(self.order_db_path, 'r') as f:
                     data = json.load(f)
                 self.virtual_capital = data.get('virtual_capital', INITIAL_BALANCE)
@@ -281,6 +284,10 @@ class BaseAgent(ABC):
                 self.open_positions = data.get('open_positions', {})
                 self.closed_positions = data.get('closed_positions', {})
                 logger.info(f'{self.name}: State loaded from {self.order_db_path}')
+        except json.JSONDecodeError as e:
+            logger.error(f'{self.name}: Corrupted state file at {self.order_db_path} ({e}), starting fresh')
+            self.open_positions = {}
+            self.closed_positions = {}
         except Exception as e:
             logger.error(f'{self.name}: Failed to load state: {e}')
             self.open_positions = {}
@@ -316,8 +323,10 @@ class BaseAgent(ABC):
                 'closed_positions': self.closed_positions,
                 'last_updated': datetime.now().isoformat()
             }
-            with open(self.order_db_path, 'w') as f:
+            tmp_path = self.order_db_path + '.tmp'
+            with open(tmp_path, 'w') as f:
                 json.dump(data, f, indent=2)
+            os.replace(tmp_path, self.order_db_path)
         except Exception as e:
             logger.error(f'{self.name}: Failed to save state: {e}')
 

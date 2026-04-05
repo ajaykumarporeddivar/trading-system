@@ -8,8 +8,10 @@ from datetime import datetime, timedelta
 from typing import Callable, Optional
 
 from ml.strategy_updater import StrategyUpdater
-from ml.trainer import load_training_data, load_model, predict_signal
+from ml.trainer import load_training_data
 from ml.model_registry import ModelRegistry
+from ml.performance_governance import PerformanceGovernance
+from ml.canary import CanaryDeployer
 from core.logger import logger
 
 ML_PREDICTIONS_LOG = 'logs/ml_predictions.jsonl'
@@ -29,6 +31,8 @@ class RetrainScheduler:
         self.min_samples = min_samples
         self.updater = StrategyUpdater()
         self.registry = ModelRegistry()
+        self.governance = PerformanceGovernance()
+        self.canary = CanaryDeployer(model_id='champion_auto')
         self.running = False
         self.thread = None
         self._last_retrain_count = 0
@@ -72,9 +76,19 @@ class RetrainScheduler:
                         logger.info('ML model retrained successfully')
                         metrics = self.updater.adjustments
                         if metrics.get('model_accuracy'):
+                            governance_result = self.governance.evaluate_candidate(
+                                'candidate_auto',
+                                champion_model='A',
+                                az_model='AZ'
+                            )
                             self.registry.register_champion(
                                 'ml/models/trading_model.pkl',
-                                {'accuracy': metrics['model_accuracy'], 'model_type': 'auto', 'total_retrains': metrics.get('total_retrains', 0)}
+                                {
+                                    'accuracy': metrics['model_accuracy'],
+                                    'model_type': 'auto',
+                                    'total_retrains': metrics.get('total_retrains', 0),
+                                    'governance': governance_result.get('decision', 'UNKNOWN')
+                                }
                             )
                     else:
                         logger.warning('ML retraining failed')

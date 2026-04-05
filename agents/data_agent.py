@@ -1,6 +1,5 @@
 import ccxt
 import pandas as pd
-import numpy as np
 from typing import Dict, List, Any, Optional
 from core.config import Config
 from core.logger import logger
@@ -18,7 +17,8 @@ class DataAgent:
             if Config.EXCHANGE == 'binance':
                 self.exchange.set_sandbox_mode(True)
         self.indicators = TechnicalIndicators()
-        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({'testnet' if Config.USE_TESTNET else 'live'})')
+        env_label = 'testnet' if Config.USE_TESTNET else 'live'
+        logger.info(f'Data Agent initialized - {Config.EXCHANGE} ({env_label})')
 
     async def fetch_ohlcv(self, symbol: str, timeframe: str = Config.TIMEFRAME, limit: int = 100) -> pd.DataFrame:
         try:

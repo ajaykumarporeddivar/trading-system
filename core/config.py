@@ -14,7 +14,7 @@ class Config:
     TIMEFRAME = os.getenv('TIMEFRAME', '4h')
     MAX_PORTFOLIO_EXPOSURE = float(os.getenv('MAX_PORTFOLIO_EXPOSURE', '0.30'))
     DAILY_LOSS_CAP = float(os.getenv('DAILY_LOSS_CAP', '0.03'))
-    MAX_DRAWDOWN = float(os.getenv('MAX_DRAWDOWN', '0.10'))
+    MAX_DRAWDOWN = float(os.getenv('MAX_DRAWDOWN', '0.08'))
     RISK_PER_TRADE = float(os.getenv('RISK_PER_TRADE', '0.01'))
     MIN_CONFIDENCE = int(os.getenv('MIN_CONFIDENCE', '65'))
     INITIAL_BALANCE = float(os.getenv('INITIAL_BALANCE', '10000'))

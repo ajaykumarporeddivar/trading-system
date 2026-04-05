@@ -62,10 +62,12 @@ class TestTechnicalIndicators:
         assert result.iloc[-1] >= 0
 
     def test_fibonacci_levels(self):
-        result = TechnicalIndicators.fibonacci_levels(100.0)
+        result = TechnicalIndicators.fibonacci_levels(110.0, 90.0)
         assert '0.0' in result
         assert '0.618' in result
-        assert result['0.0'] == 100.0
+        assert result['0.0'] == 110.0
+        assert result['1.0'] == 90.0
+        assert result['0.5'] == 100.0
 
     def test_compute_all(self, sample_data):
         result = TechnicalIndicators.compute_all(sample_data)

@@ -61,6 +61,8 @@ def require_auth(f):
         if not token:
             token = request.cookies.get('token', '')
         if not token:
+            token = request.args.get('token', '')
+        if not token:
             return jsonify({'error': 'Authentication required'}), 401
         try:
             payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
@@ -79,6 +81,8 @@ def require_admin(f):
         token = request.headers.get('Authorization', '').replace('Bearer ', '')
         if not token:
             token = request.cookies.get('token', '')
+        if not token:
+            token = request.args.get('token', '')
         if not token:
             return jsonify({'error': 'Authentication required'}), 401
         try:
@@ -571,6 +575,9 @@ def c2_halt_all():
 @require_admin
 def c2_resume_all():
     try:
+        from core.tail_risk_sentinel import TailRiskSentinel
+        sentinel = TailRiskSentinel()
+        sentinel.clear_halt()
         _log_c2_action('resume_all', {'triggered_by': request.user.get('role', 'admin')})
         _broadcast_sse('alert', {'type': 'RESUME', 'message': 'Trading resumed by admin'})
         return jsonify({'status': 'resumed', 'message': 'Trading resumed'})

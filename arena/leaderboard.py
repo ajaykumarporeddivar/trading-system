@@ -5,7 +5,7 @@ from arena.base_agent import BaseAgent
 from arena.config import AGENT_COLORS, RESET_COLOR, BOLD
 
 
-def print_leaderboard(agents: List[BaseAgent], cycle_count: int):
+def print_leaderboard(agents: List[BaseAgent], cycle_count: int | str):
     perf_data = [agent.get_performance() for agent in agents]
     perf_data.sort(key=lambda x: x['total_pnl'], reverse=True)
 
